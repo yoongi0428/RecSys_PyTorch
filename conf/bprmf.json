@@ -1,0 +1,16 @@
+{
+  "data_name": "ml-100k",
+  "split_type": "loo",
+  "split_random": true,
+  "train_ratio":0.8,
+
+  "hidden_dim": 150,
+
+  "num_epochs": 100,
+  "batch_size": 256,
+  "learning_rate": 0.005,
+  "early_stop": true,
+  "patience": 50,
+
+  "top_k": [20, 100]
+}
