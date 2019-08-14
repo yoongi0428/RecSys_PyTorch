@@ -60,8 +60,30 @@ class BPRMF(BaseModel):
                 print('(%3d / %3d) loss = %.4f' % (b, num_batches, batch_loss))
         return loss
 
-    def predict(self, dataset):
+    def predict(self, dataset, test_batch_size):
         # Temp
-        pred_matrix = F.sigmoid(self.user_embedding.weight @ torch.transpose(self.item_embedding.weight, 0, 1))
+        # pred_matrix = F.sigmoid(self.user_embedding.weight @ torch.transpose(self.item_embedding.weight, 0, 1))
+        eval_users = []
+        eval_items = []
+        eval_candidates = dataset.eval_items
+        for u in eval_candidates:
+            eval_users += [u] * len(eval_candidates[u])
+            eval_items += eval_candidates[u]
+        eval_users = torch.LongTensor(eval_users).to(self.device)
+        eval_items = torch.LongTensor(eval_items).to(self.device)
+        pred_matrix = torch.full((dataset.num_users, dataset.num_items), float('-inf'))
+
+        num_data = len(eval_items)
+        num_batches = int(np.ceil(num_data / test_batch_size))
+        perm = list(range(num_data))
+        with torch.no_grad():
+            for b in range(num_batches):
+                if (b + 1) * test_batch_size >= num_data:
+                    batch_idx = perm[b * test_batch_size:]
+                else:
+                    batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
+                batch_users, batch_items = eval_users[batch_idx], eval_items[batch_idx]
+                pred_matrix[batch_users, batch_items] = self.forward(batch_users, batch_items)
+
         return pred_matrix
 

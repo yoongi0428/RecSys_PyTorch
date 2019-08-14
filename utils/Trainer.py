@@ -12,6 +12,7 @@ class Trainer:
         self.num_epochs = conf.num_epochs
         self.lr = conf.learning_rate
         self.batch_size = conf.batch_size
+        self.test_batch_size = conf.test_batch_size
 
         self.early_stop = conf.early_stop
         self.patience = conf.patience
@@ -58,8 +59,8 @@ class Trainer:
         self.logger.info('[Best score at epoch %d] %s' % (self.best_epoch, best_score_str))
 
     def evaluate(self):
-        pred_matrix = self.model.predict(self.dataset)
-        score = self.evaluator.evaluate(pred_matrix)
+        # pred_matrix = self.model.predict(self.dataset)
+        score = self.evaluator.evaluate(self.model, self.dataset, self.test_batch_size)
         return score
 
     # def cross_validation

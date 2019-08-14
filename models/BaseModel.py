@@ -10,5 +10,5 @@ class BaseModel(nn.Module):
     def train_one_epoch(self, *input):
         pass
 
-    def predict(self):
+    def predict(self, dataset, test_batch_size):
         pass

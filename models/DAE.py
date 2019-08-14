@@ -11,29 +11,32 @@ from models.BaseModel import BaseModel
 from utils.Tools import activation_function
 
 class DAE(BaseModel):
-    def __init__(self, model_conf, num_user, num_item, device):
+    def __init__(self, model_conf, num_users, num_items, device):
         super(DAE, self).__init__()
         self.hidden_dim = model_conf.hidden_dims # list of dims
         self.act = model_conf.act
         self.corruption_ratio = model_conf.corruption_ratio
-        self.train_rkd = model_conf.train_rkd
+        self.num_users = num_users
+        self.num_items = num_items
         self.binomial = Binomial(total_count=1, probs=(1 - self.corruption_ratio))
         self.device = device
 
-        dims = [num_item] + self.hidden_dim
+        dims = [self.num_items] + self.hidden_dim
         encoder_dict = OrderedDict()
         for i, (dim_in, dim_out) in enumerate(zip(dims[:-1], dims[1:])):
             encoder_dict['encoder_%d' % (i + 1)] = nn.Linear(dim_in, dim_out)
             encoder_dict['encoder_act_%d' % (i + 1)] = activation_function(act_name=self.act)
+
         self.encoder = nn.Sequential(encoder_dict)
 
-        dims = self.hidden_dim[::-1] + [num_item]
+        dims = self.hidden_dim[::-1] + [self.num_items]
         decoder_dict = OrderedDict()
         for i, (dim_in, dim_out) in enumerate(zip(dims[:-1], dims[1:])):
             decoder_dict['decoder_%d' % (i + 1)] = nn.Linear(dim_in, dim_out)
             decoder_dict['decoder_act_%d' % (i + 1)] = \
                 activation_function(act_name=self.act) if (i + 1) < len(dims) - 1 \
                     else activation_function(act_name='sigmoid')
+
         self.decoder = nn.Sequential(decoder_dict)
 
         self.to(self.device)
@@ -58,54 +61,10 @@ class DAE(BaseModel):
 
         dec = self.decoder(enc)
 
-        if self.train_rkd and is_train:
-            # rkd_loss = self.RKD_angle(normalized_rating_matrix, enc)
-            rkd_loss = self.RKD_distance(normalized_rating_matrix, enc)
-            return dec, rkd_loss
-        else:
-            return dec
-
-    def RKD_angle(self, rating_matrix, enc):
-        with torch.no_grad():
-            td = (rating_matrix.unsqueeze(0) - rating_matrix.unsqueeze(1))
-            norm_td = F.normalize(td, p=2, dim=2)
-            t_angle = torch.bmm(norm_td, norm_td.transpose(1, 2)).view(-1)
-
-        sd = (enc.unsqueeze(0) - enc.unsqueeze(1))
-        norm_sd = F.normalize(sd, p=2, dim=2)
-        s_angle = torch.bmm(norm_sd, norm_sd.transpose(1, 2)).view(-1)
-
-        rkd_loss = F.smooth_l1_loss(s_angle, t_angle, reduction='elementwise_mean')
-        return rkd_loss
-
-    def RKD_distance(self, rating_matrix, enc):
-        def pdist(e, squared=False, eps=1e-12):
-            e_square = e.pow(2).sum(dim=1)
-            prod = e @ e.t()
-            res = (e_square.unsqueeze(1) + e_square.unsqueeze(0) - 2 * prod).clamp(min=eps)
-
-            if not squared:
-                res = res.sqrt()
-
-            res = res.clone()
-            res[range(len(e)), range(len(e))] = 0
-            return res
-
-        with torch.no_grad():
-            t_d = pdist(rating_matrix, squared=False)
-            mean_td = t_d[t_d>0].mean()
-            t_d = t_d / mean_td
-
-        d = pdist(enc, squared=False)
-        mean_d = d[d>0].mean()
-        d = d / mean_d
-
-        rkd_loss = F.smooth_l1_loss(d, t_d, reduction='elementwise_mean')
-        return rkd_loss
+        return dec
 
     def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
         # user, item, rating pairs
-        # train_matrix = dataset.train_matrix
         train_matrix = dataset.generate_rating_matrix()
 
         num_training = train_matrix.shape[0]
@@ -124,14 +83,10 @@ class DAE(BaseModel):
 
             batch_matrix = train_matrix[batch_idx]
             pred_matrix = self.forward(batch_matrix)
-            if self.train_rkd:
-                pred_matrix, rkd_loss = pred_matrix
 
             # cross_entropy
             batch_loss = batch_matrix * (pred_matrix + 1e-10).log() + (1 - batch_matrix) * (1 - pred_matrix + 1e-10).log()
             batch_loss = -torch.sum(batch_loss)
-            if self.train_rkd:
-                batch_loss += 0.5 * rkd_loss
             batch_loss.backward()
             optimizer.step()
 
@@ -144,9 +99,21 @@ class DAE(BaseModel):
     def generate_mask(self, mask_shape):
         return self.binomial.sample(mask_shape).to(self.device)
 
-    def predict(self, dataset):
-        # Temp
-        train_matrix = dataset.generate_rating_matrix()
-        pred_matrix = self.forward(train_matrix, is_train=False)
-        return pred_matrix
+    def predict(self, dataset, test_batch_size):
+        with torch.no_grad():
+            rating_matrix = dataset.generate_rating_matrix()
+            preds = torch.zeros_like(rating_matrix)
+            num_data = rating_matrix.shape[0]
+            num_batches = int(np.ceil(num_data / test_batch_size))
+            perm = list(range(num_data))
+            for b in range(num_batches):
+                if (b + 1) * test_batch_size >= num_data:
+                    batch_idx = perm[b * test_batch_size:]
+                else:
+                    batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
+                test_batch_matrix = rating_matrix[batch_idx]
+                batch_pred_matrix = self.forward(test_batch_matrix, is_train=False)
+                batch_pred_matrix.masked_fill(test_batch_matrix.byte(), float('-inf'))
+                preds[batch_idx] = batch_pred_matrix
 
+        return preds

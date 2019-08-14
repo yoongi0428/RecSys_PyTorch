@@ -4,7 +4,9 @@
   "split_random": true,
   "train_ratio":0.8,
 
-  "hidden_dim": 150,
+  "emb_dim": 150,
+  "hidden_dims": [50],
+  "activation": "relu",
 
   "num_epochs": 100,
   "batch_size": 4096,

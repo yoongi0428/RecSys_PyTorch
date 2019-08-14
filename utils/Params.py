@@ -44,3 +44,6 @@ class Params():
     def dict(self):
         """Gives dict-like access to Params instance by `params.dict['learning_rate']"""
         return self.__dict__
+
+    def update_dict(self, k, v):
+        self.__dict__[k] = v
