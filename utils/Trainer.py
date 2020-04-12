@@ -11,6 +11,7 @@ class Trainer:
 
         self.num_epochs = conf.num_epochs
         self.lr = conf.learning_rate
+        self.reg = conf.reg
         self.batch_size = conf.batch_size
         self.test_batch_size = conf.test_batch_size
 
@@ -24,7 +25,7 @@ class Trainer:
 
     def train(self):
         self.logger.info(self.conf)
-        optimizer = torch.optim.Adam(self.model.parameters(), self.lr)
+        optimizer = torch.optim.Adam(self.model.parameters(), self.lr, weight_decay=self.reg)
 
         for epoch in range(1, self.num_epochs + 1):
             # train for an epoch
@@ -36,13 +37,13 @@ class Trainer:
             score = self.evaluate()
             epoch_elapsed = time.time() - epoch_start
 
-            score_str = ' '.join(['%s = %.4f' % (k, score[k]) for k in score])
+            score_str = ' '.join(['%s=%.4f' % (m, score[m]) for m in score])
 
             self.logger.info('[Epoch %3d/%3d, epoch time: %.2f, train_time: %.2f] loss = %.4f, %s' % (
             epoch, self.num_epochs, epoch_elapsed, train_elapsed, loss, score_str))
 
             # update if ...
-            standard = 'ndcg@100'
+            standard = 'NDCG@100'
             if self.best_score is None or score[standard] >= self.best_score[standard]:
                 self.best_epoch = epoch
                 self.best_score = score

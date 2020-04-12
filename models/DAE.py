@@ -47,7 +47,7 @@ class DAE(BaseModel):
         item_degree = torch.norm(rating_matrix, 2, 0).view(1, -1)   # 1, item
         normalize = torch.sqrt(user_degree @ item_degree)
         zero_mask = normalize == 0
-        normalize = torch.masked_fill(normalize, zero_mask, 1e-10)
+        normalize = torch.masked_fill(normalize, zero_mask.bool(), 1e-10)
 
         normalized_rating_matrix = rating_matrix / normalize
 
@@ -102,7 +102,8 @@ class DAE(BaseModel):
     def predict(self, dataset, test_batch_size):
         with torch.no_grad():
             rating_matrix = dataset.generate_rating_matrix()
-            preds = torch.zeros_like(rating_matrix)
+            preds = np.zeros_like(rating_matrix)
+
             num_data = rating_matrix.shape[0]
             num_batches = int(np.ceil(num_data / test_batch_size))
             perm = list(range(num_data))
@@ -112,8 +113,7 @@ class DAE(BaseModel):
                 else:
                     batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
                 test_batch_matrix = rating_matrix[batch_idx]
-                batch_pred_matrix = self.forward(test_batch_matrix, is_train=False)
-                batch_pred_matrix.masked_fill(test_batch_matrix.byte(), float('-inf'))
+                batch_pred_matrix = self.forward(test_batch_matrix, is_train=False).detach().cpu.numpy()
+                batch_pred_matrix.masked_fill(test_batch_matrix.bool(), float('-inf'))
                 preds[batch_idx] = batch_pred_matrix
-
         return preds

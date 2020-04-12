@@ -35,5 +35,5 @@ class RunningAverage:
         self.total += 1
 
     @property
-    def value(self):
+    def mean(self):
         return self.sum / self.total

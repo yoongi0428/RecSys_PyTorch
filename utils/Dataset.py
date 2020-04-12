@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from utils.DataUtils import read_ml_data, split_holdout, split_loo
+import scipy.sparse as sp
 
 class Dataset:
     def __init__(self, data_dir, data_name, split_type, train_ratio, split_random, device):
@@ -109,6 +110,36 @@ class Dataset:
                 neg_samples[u].append(negatives[n_idx])
 
         return neg_samples
+
+    def generate_pairwise_data_from_matrix(self, rating_matrix, num_negatives=1, p=None):
+        rating_matrix = sp.csr_matrix(rating_matrix)
+        num_users, num_items = rating_matrix.shape
+        
+        users = []
+        positives = []
+        negatives = []
+        for user in range(num_users):
+            if p is None:
+                start = rating_matrix.indptr[user]
+                end = rating_matrix.indptr[user + 1]
+                pos_index = rating_matrix.indices[start:end]
+                num_positives = len(pos_index)
+                if num_positives == 0:
+                    print('[WARNING] user %d has 0 ratings. Not generating negative samples.' % user)
+                    continue
+
+                num_all_negatives = num_items - num_positives
+                prob = np.full(num_items, 1 / num_all_negatives)
+                prob[pos_index] = 0.0
+
+            neg_items = np.random.choice(num_items, num_positives * num_negatives, replace=True, p=prob)
+            for i, pos in enumerate(pos_index):
+                users += [user] * num_negatives
+                positives += [pos]  * num_negatives
+                negatives += neg_items[i * num_negatives: (i + 1) * num_negatives].tolist()
+
+        return torch.LongTensor(users), torch.LongTensor(positives), torch.LongTensor(negatives)
+
     def __str__(self):
         # return string representation of 'Dataset' class
         # print(Dataset) or str(Dataset)

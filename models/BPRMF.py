@@ -26,7 +26,8 @@ class BPRMF(BaseModel):
 
     def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
         # user, item, rating pairs
-        user_ids, item_ids, neg_ids = dataset.generate_pairwise_data()
+        # user_ids, item_ids, neg_ids = dataset.generate_pairwise_data()
+        user_ids, item_ids, neg_ids = dataset.generate_pairwise_data_from_matrix(dataset.train_matrix, 1)
 
         num_training = len(user_ids)
         num_batches = int(np.ceil(num_training / batch_size))
@@ -71,7 +72,8 @@ class BPRMF(BaseModel):
             eval_items += eval_candidates[u]
         eval_users = torch.LongTensor(eval_users).to(self.device)
         eval_items = torch.LongTensor(eval_items).to(self.device)
-        pred_matrix = torch.full((dataset.num_users, dataset.num_items), float('-inf'))
+        
+        pred_matrix = np.full((dataset.num_users, dataset.num_items), float('-inf'))
 
         num_data = len(eval_items)
         num_batches = int(np.ceil(num_data / test_batch_size))
@@ -83,7 +85,7 @@ class BPRMF(BaseModel):
                 else:
                     batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
                 batch_users, batch_items = eval_users[batch_idx], eval_items[batch_idx]
-                pred_matrix[batch_users, batch_items] = self.forward(batch_users, batch_items)
+                pred_matrix[batch_users, batch_items] = self.forward(batch_users, batch_items).detach().cpu().numpy()
 
         return pred_matrix
 
