@@ -9,146 +9,101 @@ from utils.Tools import RunningAverage as AVG
 from utils.Metrics import prec_recall_ndcg_at_k
 
 class Evaluator:
-    def __init__(self, dataset, top_k, split_type, num_threads):
-        # self.train_matrix = dataset.train_matrix.tocsr()
-        # self.test_matrix = dataset.test_matrix.tocsr()
-        # self.num_users, self.num_items = self.train_matrix.shape
-
+    def __init__(self, dataset, top_k, split_type):
         self.top_k = top_k if isinstance(top_k, list) else [top_k]
         self.split_type = split_type
-        self.num_threads = num_threads
+        self.target = dataset.test_dict
 
     def evaluate(self, model, dataset, test_batch_size):
-        self.model = model
-        self.dataset = dataset
         pred_matrix = model.predict(dataset, test_batch_size)
-        self.pred_matrix = pred_matrix#.detach().cpu().numpy()
-        # self.eval_model = model
-        # predictions = []
-        # test_user_start = time.time()
-        # for u in range(self.dataset.num_users):
-        #     predictions.append(model.predict(u, dataset.eval_items[u], dataset))
-        #     print('test %d user: ' % u, time.time() - test_user_start)
-        #
-        # target_items = list(dataset.test_dict.values())
+        topk = self.predict_topk(pred_matrix, max(self.top_k))
 
         if self.split_type == 'holdout':
-            ret = self.eval_holdout()
+            ret = self.eval_holdout(topk, self.target)
         elif self.split_type == 'loo':
-            ret = self.eval_loo()
+            ret = self.eval_loo(topk, self.target)
         else:
             raise NotImplementedError
+            
+        scores = OrderedDict()
+        for metric in ret:
+            score_by_ks = ret[metric]
+            for k in score_by_ks:
+                scores['%s@%d' % (metric, k)] = score_by_ks[k].mean
 
-        return ret
+        return scores
 
-    def eval_loo(self):
-        num_users, num_items = self.pred_matrix.shape
+    def predict_topk(self, scores, k):
+        # top_k item index (not sorted)
+        relevant_items_partition = (-scores).argpartition(k, 1)[:, 0:k]
+        
+        # top_k item score (not sorted)
+        relevant_items_partition_original_value = np.take_along_axis(scores, relevant_items_partition, 1)
+        
+        # top_k item sorted index for partition
+        relevant_items_partition_sorting = np.argsort(-relevant_items_partition_original_value, 1)
+        
+        # sort top_k index
+        topk = np.take_along_axis(relevant_items_partition, relevant_items_partition_sorting, 1)
 
-        hrs = {k: AVG() for k in self.top_k}
-        ndcgs = {k: AVG() for k in self.top_k}
-        maps = AVG()
-        aucs = AVG()
+        return topk
 
-        if self.num_threads > 1:
-            with ThreadPoolExecutor() as executor:
-                ret = executor.map(self.eval_loo_per_user, range(num_users))
-                for i, (hr_u, ndcg_u, ap_u, auc_u) in enumerate(ret):
-                    for k in self.top_k:
-                        hrs[k].update(hr_u[k])
-                        ndcgs[k].update(ndcg_u[k])
-                        maps.update(ap_u)
-                        aucs.update(auc_u)
-        else:
-            for u in range(self.dataset.num_users):
-                hr_u, ndcg_u, ap_u, auc_u = self.eval_loo_per_user(u)
-                for k in self.top_k:
-                    hrs[k].update(hr_u[k])
-                    ndcgs[k].update(ndcg_u[k])
-                    maps.update(ap_u)
-                    aucs.update(auc_u)
+    def eval_loo(self, topk,  target):
+        hr = {k: AVG() for k in self.top_k}
+        ndcg = {k: AVG() for k in self.top_k}
+        scores = {
+            'HR': hr,
+            'NDCG': ndcg
+        }
 
-        ret = OrderedDict()
-        hr_k = dict(map(lambda x: ('hr@%d' % x, hrs[x].value), hrs))
-        ndcg_k = dict(map(lambda x: ('ndcg@%d' % x, ndcgs[x].value), ndcgs))
-        ap = {'map': maps.value}
-        auc = {'auc': aucs.value}
+        for idx, u in enumerate(target):
+            pred_u = topk[idx]
+            target_u = target[u][0]
+            
+            hit_at_k = np.where(pred_u == target_u)[0][0] + 1 if target_u in pred_u else self.max_k + 1
 
-        ret.update(hr_k)
-        ret.update(ndcg_k)
-        ret.update(ap)
-        ret.update(auc)
+            for k in self.top_k:
+                hr_k = 1 if hit_at_k <= k else 0
+                ndcg_k = 1 / math.log(hit_at_k + 1, 2) if hit_at_k <= k else 0
 
-        return ret
+                scores['HR'][k].update(hr_k)
+                scores['NDCG'][k].update(ndcg_k)
 
-    def eval_loo_per_user(self, user_id):
-        target_items = self.dataset.test_dict[user_id]
-        predictions = self.pred_matrix[user_id]
-        ranked_list = torch.argsort(predictions, -1, True)
-        # ranked_list = sorted(predictions, key=lambda x: x[-1], reverse=True)
-        # ranked_list = np.array([x[0] for x in ranked_list])
+        return scores
 
-        # hit_pos = np.where(target_items == ranked_list)[0][0] + 1
-        hit_pos = (ranked_list == target_items[0]).nonzero().item() + 1
-
-        hr = {k: 1 if hit_pos <= k else 0 for k in self.top_k}
-        ndcg = {k: 1 / math.log(hit_pos + 1, 2) if hit_pos <= k else 0 for k in self.top_k}
-        ap = 1 / hit_pos
-        auc = 1 - (1 / 2) * (1 - 1 / hit_pos)
-        return hr, ndcg, ap, auc
-
-    def eval_holdout(self):
-        num_users, num_items = self.pred_matrix.shape
-
+    def eval_holdout(self, topk, target):
         prec = {k: AVG() for k in self.top_k}
         recall = {k: AVG() for k in self.top_k}
         ndcg = {k: AVG() for k in self.top_k}
+        scores = {
+            'Prec': prec,
+            'Recall': recall,
+            'NDCG': ndcg
+        }
 
-        if self.num_threads > 1:
-            with ThreadPoolExecutor() as executor:
-                ret = executor.map(self.eval_holdout_per_user, range(num_users))
-                for i, (prec_u, recall_u, ndcg_u) in enumerate(ret):
-                    for k in self.top_k:
-                        prec[k].update(prec_u[k])
-                        recall[k].update(recall_u[k])
-                        ndcg[k].update(ndcg_u[k])
-        else:
-            for u in range(num_users):
-                prec_u, recall_u, ndcg_u = self.eval_holdout_per_user(u)
-                for k in self.top_k:
-                    prec[k].update(prec_u[k])
-                    recall[k].update(recall_u[k])
-                    ndcg[k].update(ndcg_u[k])
+        for idx, u in enumerate(target):
+            pred_u = topk[idx]
+            target_u = target[u]
+            num_target_items = len(target_u)
+            for k in self.top_k:
+                pred_k = pred_u[:k]
+                hits_k = [(i + 1, item) for i, item in enumerate(pred_k) if item in target_u]
+                num_hits = len(hits_k)
 
-        ret = OrderedDict()
-        prec_k = dict(map(lambda x: ('prec@%d' % x, prec[x].value), prec))
-        recall_k = dict(map(lambda x: ('recall@%d' % x, recall[x].value), recall))
-        ndcg_k = dict(map(lambda x: ('ndcg@%d' % x, ndcg[x].value), ndcg))
+                idcg_k = 0.0
+                for i in range(1, min(num_target_items, k) + 1):
+                    idcg_k += 1 / math.log(i + 1, 2)
 
-        ret.update(prec_k)
-        ret.update(recall_k)
-        ret.update(ndcg_k)
+                dcg_k = 0.0
+                for idx, item in hits_k:
+                    dcg_k += 1 / math.log(idx + 1, 2)
+                
+                prec_k = num_hits / k
+                recall_k = num_hits / min(num_target_items, k)
+                ndcg_k = dcg_k / idcg_k
 
-        return ret
+                scores['Prec'][k].update(prec_k)
+                scores['Recall'][k].update(recall_k)
+                scores['NDCG'][k].update(ndcg_k)
 
-    def eval_holdout_per_user(self, user_id):
-        prec = {}
-        recall = {}
-        ndcg = {}
-
-        target_items = self.dataset.test_dict[user_id]
-        predictions = self.pred_matrix[user_id]
-        ranked_list = torch.argsort(predictions, -1, True).numpy()
-
-        # target_items = self.test_matrix[user_id].indices
-        #
-        # train_index = (self.train_matrix[user_id] > 0).tocoo().col
-        # pred_u = self.pred_matrix[user_id]
-        # pred_u[train_index] = float('-inf')
-        #
-        # ranked_list = np.argsort(pred_u, 0)[::-1]
-        for k in self.top_k:
-            _prec, _recall, _ndcg = prec_recall_ndcg_at_k(ranked_list, target_items, k)
-            prec[k] = _prec
-            recall[k] = _recall
-            ndcg[k] = _ndcg
-        return prec, recall, ndcg
+        return scores

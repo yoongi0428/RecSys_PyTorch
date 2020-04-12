@@ -11,12 +11,11 @@ from utils.Trainer import Trainer
 from utils.ModelBuilder import build_model
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default='gmf')
+parser.add_argument('--model', type=str, default='multvae')
 parser.add_argument('--data_dir', type=str, default='./data')
 parser.add_argument('--save_dir', type=str, default='./saves')
 parser.add_argument('--conf_dir', type=str, default='./conf')
 parser.add_argument('--seed', type=int, default=428)
-parser.add_argument('--num_thread', type=int, default=1)
 
 conf = parser.parse_args()
 model_conf = Params(os.path.join(conf.conf_dir, conf.model.lower() + '.json'))
@@ -39,7 +38,7 @@ log_dir = os.path.join('saves', conf.model)
 logger = Logger(log_dir)
 model_conf.save(os.path.join(logger.log_dir, 'config.json'))
 
-evaluator = Evaluator(dataset, model_conf.top_k, model_conf.split_type, conf.num_thread)
+evaluator = Evaluator(dataset, model_conf.top_k, model_conf.split_type)
 
 model = build_model(conf.model, model_conf, dataset.num_users, dataset.num_items, device)
 
