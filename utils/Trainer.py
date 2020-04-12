@@ -25,7 +25,10 @@ class Trainer:
 
     def train(self):
         self.logger.info(self.conf)
-        optimizer = torch.optim.Adam(self.model.parameters(), self.lr, weight_decay=self.reg)
+        if len(list(self.model.parameters())) > 0:
+            optimizer = torch.optim.Adam(self.model.parameters(), self.lr, weight_decay=self.reg)
+        else:
+            optimizer = None
 
         for epoch in range(1, self.num_epochs + 1):
             # train for an epoch
