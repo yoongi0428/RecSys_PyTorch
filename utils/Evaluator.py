@@ -3,10 +3,8 @@ import time
 import torch
 import numpy as np
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
 
 from utils.Tools import RunningAverage as AVG
-from utils.Metrics import prec_recall_ndcg_at_k
 
 class Evaluator:
     def __init__(self, dataset, top_k, split_type):
