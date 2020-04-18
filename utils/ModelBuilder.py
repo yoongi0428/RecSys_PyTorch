@@ -1,3 +1,4 @@
+from models.ItemKNN import ItemKNN
 from models.SLIMElastic import SLIMElastic
 from models.DAE import DAE
 from models.CDAE import CDAE
@@ -10,13 +11,11 @@ from models.MultVAE import MultVAE
 from models.EASE import EASE
 
 def build_model(model_name, model_conf, num_users, num_items, device):
-    model_name = model_name.lower()
-
-    if model_name == 'dae':
+    if model_name == 'DAE':
         model = DAE(model_conf, num_users, num_items, device)
-    elif model_name == 'cdae':
+    elif model_name == 'CDAE':
         model = CDAE(model_conf, num_users, num_items, device)
-    elif model_name =='bprmf':
+    elif model_name =='BPRMF':
         model = BPRMF(model_conf, num_users, num_items, device)
     # elif model_name == 'gmf':
     #     model = GMF(model_conf, num_users, num_items, device)
@@ -24,12 +23,14 @@ def build_model(model_name, model_conf, num_users, num_items, device):
     #     model = MLP(model_conf, num_users, num_items, device)
     # elif model_name == 'neumf':
     #     model = NeuMF(model_conf, num_users, num_items, device)
-    elif model_name == 'multvae':
+    elif model_name == 'MultVAE':
         model = MultVAE(model_conf, num_users, num_items, device)
-    elif model_name == 'ease':
+    elif model_name == 'EASE':
         model = EASE(model_conf, num_users, num_items, device)
-    elif model_name == 'slim':
+    elif model_name == 'SLIM':
         model = SLIMElastic(model_conf, num_users, num_items, device)
+    elif model_name == 'ItemKNN':
+        model = ItemKNN(model_conf, num_users, num_items, device)
     else:
         raise NotImplementedError('Choose correct model name.')
 
