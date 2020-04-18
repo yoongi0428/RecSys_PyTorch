@@ -1,7 +1,5 @@
 {
     "data_name": "ml-100k",
-    "split_type": "holdout",
-    "split_random": true,
     "train_ratio":0.8,
   
     "reg": 1000.0,

@@ -1,13 +1,10 @@
 {
   "data_name": "ml-100k",
-  "split_type": "holdout",
-  "split_random": true,
   "train_ratio":0.8,
 
-  "hidden_dims": [150],
+  "hidden_dim": 50,
   "corruption_ratio": 0.5,
   "act": "tanh",
-  "train_rkd": false,
 
   "num_epochs": 500,
   "batch_size": 1024,

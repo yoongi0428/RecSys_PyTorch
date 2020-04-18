@@ -1,14 +1,11 @@
 # """
 # Wu, Yao, et al. "Collaborative denoising auto-encoders for top-n recommender systems." Proceedings of the Ninth ACM International Conference on Web Search and Data Mining. ACM, 2016.
 # """
-from collections import OrderedDict
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions.binomial import Binomial
+import numpy as np
 from models.BaseModel import BaseModel
-from utils.Tools import activation_function
 
 class MultVAE(BaseModel):
     def __init__(self, model_conf, num_users, num_items, device):
@@ -50,7 +47,7 @@ class MultVAE(BaseModel):
 
         self.to(self.device)
 
-    def forward(self, rating_matrix, is_train=True):
+    def forward(self, rating_matrix):
         # encoder
         h = F.dropout(F.normalize(rating_matrix), p=self.dropout, training=self.training)
         for layer in self.encoder:
@@ -68,15 +65,17 @@ class MultVAE(BaseModel):
         for layer in self.decoder:
             output = layer(output)
 
-        if is_train:
+        if self.training:
             kl_loss = ((0.5 * (-logvar_q + torch.exp(logvar_q) + torch.pow(mu_q, 2) - 1)).sum(1)).mean()
             return output, kl_loss
         else:
             return output
 
     def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
+        self.train()
+
         # user, item, rating pairs
-        train_matrix = dataset.generate_rating_matrix()
+        train_matrix = dataset.train_matrix
 
         num_training = train_matrix.shape[0]
         num_batches = int(np.ceil(num_training / batch_size))
@@ -91,7 +90,7 @@ class MultVAE(BaseModel):
                 batch_idx = perm[b * batch_size:]
             else:
                 batch_idx = perm[b * batch_size: (b + 1) * batch_size]
-            batch_matrix = train_matrix[batch_idx]
+            batch_matrix = torch.FloatTensor(train_matrix[batch_idx].toarray()).to(self.device)
 
             if self.total_anneal_steps > 0:
                 self.anneal = min(self.anneal_cap, 1. * self.update_count / self.total_anneal_steps)
@@ -115,12 +114,12 @@ class MultVAE(BaseModel):
                 print('(%3d / %3d) loss = %.4f' % (b, num_batches, batch_loss))
         return loss
 
-    def predict(self, dataset, test_batch_size):
+    def predict(self, eval_users, eval_pos, test_batch_size):
         with torch.no_grad():
-            rating_matrix = dataset.generate_rating_matrix()
-            preds = np.zeros_like(rating_matrix)
+            input_matrix = torch.FloatTensor(eval_pos.toarray()).to(self.device)
+            preds = np.zeros_like(input_matrix)
 
-            num_data = rating_matrix.shape[0]
+            num_data = input_matrix.shape[0]
             num_batches = int(np.ceil(num_data / test_batch_size))
             perm = list(range(num_data))
             for b in range(num_batches):
@@ -128,8 +127,8 @@ class MultVAE(BaseModel):
                     batch_idx = perm[b * test_batch_size:]
                 else:
                     batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
-                test_batch_matrix = rating_matrix[batch_idx]
-                batch_pred_matrix = self.forward(test_batch_matrix, is_train=False)
+                test_batch_matrix = input_matrix[batch_idx]
+                batch_pred_matrix = self.forward(test_batch_matrix)
                 batch_pred_matrix.masked_fill(test_batch_matrix.bool(), float('-inf'))
                 preds[batch_idx] = batch_pred_matrix.detach().cpu().numpy()
         return preds

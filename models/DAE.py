@@ -8,12 +8,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.binomial import Binomial
 from models.BaseModel import BaseModel
-from utils.Tools import activation_function
+from utils.Tools import apply_activation
 
 class DAE(BaseModel):
     def __init__(self, model_conf, num_users, num_items, device):
         super(DAE, self).__init__()
-        self.hidden_dim = model_conf.hidden_dims # list of dims
+        self.hidden_dim = model_conf.hidden_dim
         self.act = model_conf.act
         self.corruption_ratio = model_conf.corruption_ratio
         self.num_users = num_users
@@ -21,27 +21,12 @@ class DAE(BaseModel):
         self.binomial = Binomial(total_count=1, probs=(1 - self.corruption_ratio))
         self.device = device
 
-        dims = [self.num_items] + self.hidden_dim
-        encoder_dict = OrderedDict()
-        for i, (dim_in, dim_out) in enumerate(zip(dims[:-1], dims[1:])):
-            encoder_dict['encoder_%d' % (i + 1)] = nn.Linear(dim_in, dim_out)
-            encoder_dict['encoder_act_%d' % (i + 1)] = activation_function(act_name=self.act)
-
-        self.encoder = nn.Sequential(encoder_dict)
-
-        dims = self.hidden_dim[::-1] + [self.num_items]
-        decoder_dict = OrderedDict()
-        for i, (dim_in, dim_out) in enumerate(zip(dims[:-1], dims[1:])):
-            decoder_dict['decoder_%d' % (i + 1)] = nn.Linear(dim_in, dim_out)
-            decoder_dict['decoder_act_%d' % (i + 1)] = \
-                activation_function(act_name=self.act) if (i + 1) < len(dims) - 1 \
-                    else activation_function(act_name='sigmoid')
-
-        self.decoder = nn.Sequential(decoder_dict)
+        self.encoder = nn.Linear(self.num_items, self.hidden_dim)
+        self.decoder = nn.Linear(self.hidden_dim, self.num_items)
 
         self.to(self.device)
 
-    def forward(self, rating_matrix, is_train=True):
+    def forward(self, rating_matrix):
         # normalize
         user_degree = torch.norm(rating_matrix, 2, 1).view(-1, 1)   # user, 1
         item_degree = torch.norm(rating_matrix, 2, 0).view(1, -1)   # 1, item
@@ -52,20 +37,21 @@ class DAE(BaseModel):
         normalized_rating_matrix = rating_matrix / normalize
 
         # corruption
-        if is_train:
-            mask = self.generate_mask(normalized_rating_matrix.shape)
-            normalized_rating_matrix *= mask
+        normalized_rating_matrix = F.dropout(normalized_rating_matrix, self.corruption_ratio, training=self.training)
 
         # AE
         enc = self.encoder(normalized_rating_matrix)
+        enc = apply_activation(self.act, enc)
 
         dec = self.decoder(enc)
 
-        return dec
+        return torch.sigmoid(dec)
 
     def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
+        self.train()
+        
         # user, item, rating pairs
-        train_matrix = dataset.generate_rating_matrix()
+        train_matrix = dataset.train_matrix
 
         num_training = train_matrix.shape[0]
         num_batches = int(np.ceil(num_training / batch_size))
@@ -81,12 +67,13 @@ class DAE(BaseModel):
             else:
                 batch_idx = perm[b * batch_size: (b + 1) * batch_size]
 
-            batch_matrix = train_matrix[batch_idx]
+            batch_matrix = torch.FloatTensor(train_matrix[batch_idx].toarray()).to(self.device)
             pred_matrix = self.forward(batch_matrix)
 
             # cross_entropy
-            batch_loss = batch_matrix * (pred_matrix + 1e-10).log() + (1 - batch_matrix) * (1 - pred_matrix + 1e-10).log()
-            batch_loss = -torch.sum(batch_loss)
+            batch_loss = F.binary_cross_entropy(pred_matrix, batch_matrix, reduction='sum')
+            # batch_loss = batch_matrix * (pred_matrix + 1e-10).log() + (1 - batch_matrix) * (1 - pred_matrix + 1e-10).log()
+            # batch_loss = -torch.sum(batch_loss)
             batch_loss.backward()
             optimizer.step()
 
@@ -96,15 +83,12 @@ class DAE(BaseModel):
                 print('(%3d / %3d) loss = %.4f' % (b, num_batches, batch_loss))
         return loss
 
-    def generate_mask(self, mask_shape):
-        return self.binomial.sample(mask_shape).to(self.device)
-
-    def predict(self, dataset, test_batch_size):
+    def predict(self, eval_users, eval_pos, test_batch_size):
         with torch.no_grad():
-            rating_matrix = dataset.generate_rating_matrix()
-            preds = np.zeros_like(rating_matrix)
+            input_matrix = torch.FloatTensor(eval_pos.toarray()).to(self.device)
+            preds = np.zeros_like(input_matrix)
 
-            num_data = rating_matrix.shape[0]
+            num_data = input_matrix.shape[0]
             num_batches = int(np.ceil(num_data / test_batch_size))
             perm = list(range(num_data))
             for b in range(num_batches):
@@ -112,8 +96,9 @@ class DAE(BaseModel):
                     batch_idx = perm[b * test_batch_size:]
                 else:
                     batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
-                test_batch_matrix = rating_matrix[batch_idx]
-                batch_pred_matrix = self.forward(test_batch_matrix, is_train=False)
+                
+                test_batch_matrix = input_matrix[batch_idx]
+                batch_pred_matrix = self.forward(test_batch_matrix)
                 batch_pred_matrix.masked_fill(test_batch_matrix.bool(), float('-inf'))
                 preds[batch_idx] = batch_pred_matrix.detach().cpu().numpy()
         return preds

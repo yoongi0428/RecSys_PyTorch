@@ -1,7 +1,5 @@
 {
   "data_name": "ml-100k",
-  "split_type": "loo",
-  "split_random": true,
   "train_ratio":0.8,
 
   "use_pretrain": true,

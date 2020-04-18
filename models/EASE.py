@@ -1,14 +1,11 @@
 """
 Wu, Yao, et al. "Collaborative denoising auto-encoders for top-n recommender systems." Proceedings of the Ninth ACM International Conference on Web Search and Data Mining. ACM, 2016.
 """
-from collections import OrderedDict
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions.binomial import Binomial
 from models.BaseModel import BaseModel
-from utils.Tools import activation_function
 
 class EASE(BaseModel):
     def __init__(self, model_conf, num_users, num_items, device):
@@ -39,9 +36,8 @@ class EASE(BaseModel):
         return output
 
     def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
-        # user, item, rating pairs
-        train_matrix = dataset.generate_rating_matrix()
-
+        self.train()
+        
         # Solve EASE
         train_matrix = torch.FloatTensor(dataset.train_matrix.toarray()).to(self.device)
         output = self.forward(train_matrix)
@@ -53,12 +49,12 @@ class EASE(BaseModel):
     def generate_mask(self, mask_shape):
         return self.binomial.sample(mask_shape).to(self.device)
 
-    def predict(self, dataset, test_batch_size):
+    def predict(self, eval_users, eval_pos, test_batch_size):
         with torch.no_grad():
-            rating_matrix = dataset.generate_rating_matrix()
-            preds = np.zeros_like(rating_matrix)
+            input_matrix = torch.FloatTensor(eval_pos.toarray()).to(self.device)
+            preds = np.zeros_like(input_matrix)
 
-            num_data = rating_matrix.shape[0]
+            num_data = input_matrix.shape[0]
             num_batches = int(np.ceil(num_data / test_batch_size))
             perm = list(range(num_data))
             for b in range(num_batches):
@@ -66,7 +62,7 @@ class EASE(BaseModel):
                     batch_idx = perm[b * test_batch_size:]
                 else:
                     batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
-                test_batch_matrix = rating_matrix[batch_idx]
+                test_batch_matrix = input_matrix[batch_idx]
                 batch_pred_matrix = (test_batch_matrix @ self.enc_w)
                 batch_pred_matrix.masked_fill(test_batch_matrix.bool(), float('-inf'))
                 preds[batch_idx] = batch_pred_matrix.detach().cpu().numpy()

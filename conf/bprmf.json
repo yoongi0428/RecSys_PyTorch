@@ -1,7 +1,5 @@
 {
   "data_name": "ml-100k",
-  "split_type": "holdout",
-  "split_random": true,
   "train_ratio":0.8,
 
   "hidden_dim": 64,
@@ -9,7 +7,7 @@
   "num_epochs": 300,
   "batch_size": 4096,
   "test_batch_size": 4096,
-  "learning_rate": 0.005,
+  "learning_rate": 0.01,
   "early_stop": true,
   "patience": 50,
 

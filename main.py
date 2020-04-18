@@ -11,7 +11,7 @@ from utils.Trainer import Trainer
 from utils.ModelBuilder import build_model
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default='ease')
+parser.add_argument('--model', type=str, default='slim')
 parser.add_argument('--data_dir', type=str, default='./data')
 parser.add_argument('--save_dir', type=str, default='./saves')
 parser.add_argument('--conf_dir', type=str, default='./conf')
@@ -29,9 +29,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 dataset = Dataset(
     data_dir=conf.data_dir,
     data_name=model_conf.data_name,
-    split_type=model_conf.split_type,
     train_ratio=model_conf.train_ratio,
-    split_random=model_conf.split_random,
     device=device
 )
 
