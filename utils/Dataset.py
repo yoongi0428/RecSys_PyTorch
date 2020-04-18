@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-from utils.DataUtils import read_ml_data, split_holdout, split_loo
+from utils.DataUtils import preprocess, load_data
 import scipy.sparse as sp
 
 class Dataset:
@@ -24,30 +24,27 @@ class Dataset:
         else:
             raise NotImplementedError('Choose correct dataset: {ml-100k, ml-1m}')
 
-        print('Read movielens data from %s' % filename)
-        # load movie lens...
-        self.data_dict, self.user_id_to_idx, self.item_id_to_idx = \
-            read_ml_data(os.path.join(data_dir, data_name, filename), sep)
+        data_path = os.path.join(data_dir, data_name, data_name + '.data')
+        stat_path = os.path.join(data_dir, data_name, data_name + '.stat')
 
-        print('Split data into train & test ... (%s)' % self.split_type)
-        # split data into {holdout, loo}
-        if self.split_type == 'holdout':
-            self.train_matrix, self.train_dict, self.test_matrix, self.test_dict, self.time_matrix = \
-                split_holdout(self.data_dict, self.num_users, self.num_items, self.train_ratio, self.split_random)
-        elif self.split_type == 'loo':
-            self.train_matrix, self.train_dict, self.test_matrix, self.test_dict, self.time_matrix = \
-                split_loo(self.data_dict, self.num_users, self.num_items, self.split_random)
+        if os.path.exists(data_path) and os.path.exists(data_path):
+            print('Already preprocessed. Load from file.')
         else:
-            raise NotImplementedError('Choose correct data split type: {holdout, loo}')
+            preprocess(os.path.join(data_dir, data_name, filename), data_path, stat_path, sep)
 
-        self.neg_items = {}
-        all_items = set(np.arange(self.num_items))
-        for u in range(self.num_users):
-            self.neg_items[u] = list(all_items - set(self.train_dict[u]))
+        print('Read movielens data from %s' % data_path)
+        self.train_matrix, self.test_matrix, self.user_id_map, self.user_popularity, self.item_id_map, self.item_popularity, self.num_uesrs, self.num_items = load_data(data_path)
 
-        print('Dataset prepared')
+    def sparse_to_dict(self, sparse_matrix):
+        ret_dict = {}
+        num_users = sparse_matrix.shape[0]
+        for u in range(num_users):
+            items_u = sparse_matrix.indices[sparse_matrix.indptr[u]: sparse_matrix.indptr[u+1]]
+            ret_dict[u] = items_u.tolist()
+        return ret_dict
 
-        self.eval_items = self.neg_items
+    def eval_data(self):
+        return self.train_matrix, self.sparse_to_dict(self.test_matrix)
 
     def generate_pairwise_data(self):
         # generate item, pos, neg triplets
@@ -98,9 +95,6 @@ class Dataset:
 
         return users, items, ratings
 
-    def generate_rating_matrix(self):
-        return torch.FloatTensor(self.train_matrix.toarray()).to(self.device)
-
     def generate_negative_samples(self, num_negatives):
         neg_samples = {u: [] for u in range(self.num_users)}
         for u in self.neg_items:
@@ -148,9 +142,6 @@ class Dataset:
         # ret += 'Test file : %s\n' % self.test_file
         ret += 'Number of Users : %d\n' % self.num_users
         ret += 'Number of items : %d\n' % self.num_items
-        ret += 'Split type: '
-        ret += 'Leave-One-Out\n' if self.split_type == 'loo' else 'Holdout\n'
-        if self.split_type == 'ratio':
-            ret += 'Split ratio: %s\n' % str(self.train_ratio)
+        ret += 'Split ratio: %s\n' % str(self.train_ratio)
         ret += '\n'
         return ret

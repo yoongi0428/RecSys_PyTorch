@@ -34,11 +34,14 @@ dataset = Dataset(
     split_random=model_conf.split_random,
     device=device
 )
+
 log_dir = os.path.join('saves', conf.model)
 logger = Logger(log_dir)
 model_conf.save(os.path.join(logger.log_dir, 'config.json'))
 
-evaluator = Evaluator(dataset, model_conf.top_k, model_conf.split_type)
+eval_pos, eval_target = dataset.eval_data()
+item_popularity = dataset.item_popularity
+evaluator = Evaluator(eval_pos, eval_target, item_popularity, model_conf.top_k)
 
 model = build_model(conf.model, model_conf, dataset.num_users, dataset.num_items, device)
 

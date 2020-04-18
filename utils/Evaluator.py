@@ -7,29 +7,40 @@ from collections import OrderedDict
 from utils.Tools import RunningAverage as AVG
 
 class Evaluator:
-    def __init__(self, dataset, top_k, split_type):
+    def __init__(self, eval_pos, eval_target, item_popularity, top_k):
         self.top_k = top_k if isinstance(top_k, list) else [top_k]
-        self.split_type = split_type
-        self.target = dataset.test_dict
+        self.max_k = max(self.top_k)
+        self.eval_pos = eval_pos
+        self.eval_target = eval_target
+        self.item_popularity = item_popularity
+        self.num_users, self.num_items = self.eval_pos.shape
+        self.item_self_information = self.compute_item_self_info(item_popularity)
 
     def evaluate(self, model, dataset, test_batch_size):
-        pred_matrix = model.predict(dataset, test_batch_size)
+        model.eval()
+
+        eval_users = list(self.eval_target.keys())
+        
+        pred_matrix = model.predict(eval_users, self.eval_pos, test_batch_size)
         topk = self.predict_topk(pred_matrix, max(self.top_k))
-
-        if self.split_type == 'holdout':
-            ret = self.eval_holdout(topk, self.target)
-        elif self.split_type == 'loo':
-            ret = self.eval_loo(topk, self.target)
-        else:
-            raise NotImplementedError
-            
-        scores = OrderedDict()
-        for metric in ret:
-            score_by_ks = ret[metric]
+        
+        # Precision, Recall, NDCG @ k
+        scores = self.prec_recall_ndcg(topk, self.eval_target)
+        score_dict = OrderedDict()
+        for metric in scores:
+            score_by_ks = scores[metric]
             for k in score_by_ks:
-                scores['%s@%d' % (metric, k)] = score_by_ks[k].mean
+                score_dict['%s@%d' % (metric, k)] = score_by_ks[k].mean
+        
+        # Novelty @ k
+        novelty_dict = self.novelty(topk)
+        for k, v in novelty_dict.items():
+            score_dict[k] = v
 
-        return scores
+        # Gini diversity
+        score_dict['Gini-D'] = self.gini_diversity(topk)
+
+        return score_dict
 
     def predict_topk(self, scores, k):
         # top_k item index (not sorted)
@@ -46,30 +57,7 @@ class Evaluator:
 
         return topk
 
-    def eval_loo(self, topk,  target):
-        hr = {k: AVG() for k in self.top_k}
-        ndcg = {k: AVG() for k in self.top_k}
-        scores = {
-            'HR': hr,
-            'NDCG': ndcg
-        }
-
-        for idx, u in enumerate(target):
-            pred_u = topk[idx]
-            target_u = target[u][0]
-            
-            hit_at_k = np.where(pred_u == target_u)[0][0] + 1 if target_u in pred_u else self.max_k + 1
-
-            for k in self.top_k:
-                hr_k = 1 if hit_at_k <= k else 0
-                ndcg_k = 1 / math.log(hit_at_k + 1, 2) if hit_at_k <= k else 0
-
-                scores['HR'][k].update(hr_k)
-                scores['NDCG'][k].update(ndcg_k)
-
-        return scores
-
-    def eval_holdout(self, topk, target):
+    def prec_recall_ndcg(self, topk, target):
         prec = {k: AVG() for k in self.top_k}
         recall = {k: AVG() for k in self.top_k}
         ndcg = {k: AVG() for k in self.top_k}
@@ -105,3 +93,42 @@ class Evaluator:
                 scores['NDCG'][k].update(ndcg_k)
 
         return scores
+
+    def novelty(self, topk):
+        topk_info = np.take(self.item_self_information, topk)
+        top_k_array = np.array(self.top_k)
+        topk_info_sum = np.cumsum(topk_info, 1)[:, top_k_array - 1]
+        novelty_all_users = topk_info_sum / np.atleast_2d(top_k_array)
+        novelty = np.mean(novelty_all_users, axis=0)
+
+        novelty_dict = {'Nov@%d' % self.top_k[i]: novelty[i] for i in range(len(self.top_k))}
+
+        return novelty_dict
+
+    def gini_diversity(self, topk):
+        num_items = self.eval_pos.shape[1]
+        item_recommend_counter = np.zeros(num_items, dtype=np.int)
+        
+        rec_item, rec_count = np.unique(topk, return_counts=True)
+        item_recommend_counter[rec_item] += rec_count
+
+        item_recommend_counter_mask = np.ones_like(item_recommend_counter, dtype = np.bool)
+        item_recommend_counter_mask[item_recommend_counter == 0] = False
+        item_recommend_counter = item_recommend_counter[item_recommend_counter_mask]
+        num_eff_items = len(item_recommend_counter)
+
+        item_recommend_counter_sorted = np.sort(item_recommend_counter)       # values must be sorted
+        index = np.arange(1, num_eff_items+1)                                 # index per array element
+
+        gini_diversity = 2 * np.sum((num_eff_items + 1 - index) / (num_eff_items + 1) * item_recommend_counter_sorted / np.sum(item_recommend_counter_sorted))
+        return gini_diversity
+
+    def compute_item_self_info(self, item_popularity):
+        self_info = np.zeros(len(item_popularity))
+        # total = 0
+        for i in item_popularity:
+            self_info[i] = item_popularity[i] / self.num_users
+            # total += item_popularity[i]
+        # self_info /= total
+        self_info = -np.log2(self_info)
+        return self_info
