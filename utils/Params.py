@@ -5,6 +5,7 @@ Codes from:
 https://github.com/cs230-stanford/cs230-code-examples/blob/master/pytorch/nlp/utils.py
 """
 
+
 class Params():
     """Class that loads hyperparameters from a json file.
     Example:
@@ -42,7 +43,10 @@ class Params():
 
     @property
     def dict(self):
-        """Gives dict-like access to Params instance by `params.dict['learning_rate']"""
+        """
+        Gives dict-like access to params instance by
+        `params.dict['learning_rate']
+        """
         return self.__dict__
 
     def update_dict(self, k, v):

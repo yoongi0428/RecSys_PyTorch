@@ -19,7 +19,7 @@ class Evaluator:
     def evaluate(self, model, dataset, test_batch_size):
         model.eval()
 
-        eval_users = list(self.eval_target.keys())
+        eval_users = np.array(list(self.eval_target.keys()))
         
         pred_matrix = model.predict(eval_users, self.eval_pos, test_batch_size)
         topk = self.predict_topk(pred_matrix, max(self.top_k))

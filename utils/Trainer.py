@@ -11,7 +11,6 @@ class Trainer:
 
         self.num_epochs = conf.num_epochs
         self.lr = conf.learning_rate
-        self.reg = conf.reg
         self.batch_size = conf.batch_size
         self.test_batch_size = conf.test_batch_size
 
@@ -26,7 +25,7 @@ class Trainer:
     def train(self):
         self.logger.info(self.conf)
         if len(list(self.model.parameters())) > 0:
-            optimizer = torch.optim.Adam(self.model.parameters(), self.lr, weight_decay=self.reg)
+            optimizer = torch.optim.Adam(self.model.parameters(), self.lr)
         else:
             optimizer = None
 

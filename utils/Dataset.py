@@ -5,12 +5,9 @@ from utils.DataUtils import preprocess, load_data
 import scipy.sparse as sp
 
 class Dataset:
-    def __init__(self, data_dir, data_name, split_type, train_ratio, split_random, device):
-        self.split_type = split_type
-        self.split_random = split_random
+    def __init__(self, data_dir, data_name, train_ratio, device):
         self.train_ratio = train_ratio
         self.num_negatives = 3
-        self.pointwise_data = None
         self.device = device
 
         if data_name == 'ml-100k':
@@ -46,67 +43,7 @@ class Dataset:
     def eval_data(self):
         return self.train_matrix, self.sparse_to_dict(self.test_matrix)
 
-    def generate_pairwise_data(self):
-        # generate item, pos, neg triplets
-        users = []
-        items = []
-        neg = []
-
-        for u, pos_i in self.train_matrix.keys():
-            for _ in range(self.num_negatives):
-                neg_i = np.random.choice(self.num_items)
-                while neg_i in self.train_dict[u]:
-                    neg_i = np.random.choice(self.num_items)
-
-                users.append(u)
-                items.append(pos_i)
-                neg.append(neg_i)
-        users = torch.LongTensor(users).to(self.device)
-        items = torch.LongTensor(items).to(self.device)
-        neg = torch.LongTensor(neg).to(self.device)
-        return users, items, neg
-
-    def generate_pointwise_data(self):
-        # generate item, item, rating triplets
-        if self.pointwise_data is None:
-            users = []
-            items = []
-            ratings = []
-
-            for u, i in self.train_matrix.keys():
-                r = self.train_matrix[u, i]
-                users.append(u)
-                items.append(i)
-                ratings.append(r)
-            self.pointwise_data = users, items, ratings
-
-        users, items, ratings = self.pointwise_data
-        neg_samples = self.generate_negative_samples(self.num_negatives)
-        for u in neg_samples:
-            neg_items = neg_samples[u]
-
-            users += [u] * len(neg_items)
-            items += neg_items
-            ratings += [0.0] * len(neg_items)
-
-        users = torch.LongTensor(users).to(self.device)
-        items = torch.LongTensor(items).to(self.device)
-        ratings = torch.FloatTensor(ratings).to(self.device)
-
-        return users, items, ratings
-
-    def generate_negative_samples(self, num_negatives):
-        neg_samples = {u: [] for u in range(self.num_users)}
-        for u in self.neg_items:
-            negatives = self.neg_items[u]
-            neg_idx = np.random.choice(len(negatives), num_negatives, replace=False)
-            for n_idx in neg_idx:
-                neg_samples[u].append(negatives[n_idx])
-
-        return neg_samples
-
     def generate_pairwise_data_from_matrix(self, rating_matrix, num_negatives=1, p=None):
-        rating_matrix = sp.csr_matrix(rating_matrix)
         num_users, num_items = rating_matrix.shape
         
         users = []

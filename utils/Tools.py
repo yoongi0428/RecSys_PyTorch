@@ -13,18 +13,6 @@ def apply_activation(act_name, x):
     else:
         raise NotImplementedError('Choose appropriate activation function. (current input: %s)' % act_name)
 
-def activation_function(act_name):
-    if act_name == 'sigmoid':
-        return nn.Sigmoid()
-    elif act_name == 'tanh':
-        return nn.Tanh()
-    elif act_name == 'relu':
-        return nn.ReLU()
-    elif act_name == 'elu':
-        return nn.ELU()
-    else:
-        raise NotImplementedError('Choose appropriate activation function. (current input: %s)' % act_name)
-
 class RunningAverage:
     def __init__(self):
         self.sum = 0
