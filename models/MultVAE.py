@@ -1,6 +1,7 @@
-# """
-# Wu, Yao, et al. "Collaborative denoising auto-encoders for top-n recommender systems." Proceedings of the Ninth ACM International Conference on Web Search and Data Mining. ACM, 2016.
-# """
+"""
+Dawen Liang et al., Variational Autoencoders for Collaborative Filtering. WWW 2018.
+https://arxiv.org/pdf/1802.05814
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

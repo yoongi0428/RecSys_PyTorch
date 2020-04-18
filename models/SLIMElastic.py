@@ -1,5 +1,6 @@
 """
-Wu, Yao, et al. "Collaborative denoising auto-encoders for top-n recommender systems." Proceedings of the Ninth ACM International Conference on Web Search and Data Mining. ACM, 2016.
+Xia Ning et al., SLIM: Sparse Linear Methods for Top-N Recommender Systems. ICDM 2011.
+http://glaros.dtc.umn.edu/gkhome/fetch/papers/SLIM2011icdm.pdf
 """
 import numpy as np
 import torch

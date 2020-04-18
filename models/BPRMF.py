@@ -1,5 +1,6 @@
 """
-Rendle, Steffen, et al. "BPR: Bayesian personalized ranking from implicit feedback." Proceedings of the twenty-fifth conference on uncertainty in artificial intelligence. AUAI Press, 2009..
+Steffen Rendle et al., BPR: Bayesian Personalized Ranking from Implicit Feedback. UAI 2009. 
+https://arxiv.org/pdf/1205.2618
 """
 import numpy as np
 import torch

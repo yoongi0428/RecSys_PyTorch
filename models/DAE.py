@@ -1,5 +1,6 @@
 """
-Wu, Yao, et al. "Collaborative denoising auto-encoders for top-n recommender systems." Proceedings of the Ninth ACM International Conference on Web Search and Data Mining. ACM, 2016.
+Yao Wu et al., Collaborative denoising auto-encoders for top-n recommender systems. WSDM 2016.
+https://alicezheng.org/papers/wsdm16-cdae.pdf
 """
 from collections import OrderedDict
 import numpy as np

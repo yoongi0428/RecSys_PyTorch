@@ -1,5 +1,6 @@
 """
-Wu, Yao, et al. "Collaborative denoising auto-encoders for top-n recommender systems." Proceedings of the Ninth ACM International Conference on Web Search and Data Mining. ACM, 2016.
+Harald Steck, Embarrassingly Shallow Autoencoders for Sparse Data. WWW 2019.
+https://arxiv.org/pdf/1905.03375
 """
 import numpy as np
 import torch
