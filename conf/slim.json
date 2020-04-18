@@ -1,0 +1,17 @@
+{
+  "data_name": "ml-100k",
+  "train_ratio":0.8,
+
+  "l1_reg": 0.001,
+  "l2_reg": 0.001,
+  "topk": 100,
+
+  "num_epochs": 1,
+  "batch_size": 4096,
+  "test_batch_size": 4096,
+  "learning_rate": 0.01,
+  "early_stop": true,
+  "patience": 50,
+
+  "top_k": [100]
+}
