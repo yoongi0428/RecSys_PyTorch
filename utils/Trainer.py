@@ -1,5 +1,6 @@
 import time
 import torch
+from utils.Table import Table
 
 class Trainer:
     def __init__(self, dataset, model, evaluator, logger, conf):
@@ -28,6 +29,7 @@ class Trainer:
             optimizer = torch.optim.Adam(self.model.parameters(), self.lr)
         else:
             optimizer = None
+        score_table = Table(table_name='Scores')
 
         for epoch in range(1, self.num_epochs + 1):
             # train for an epoch
@@ -58,12 +60,9 @@ class Trainer:
                     break
 
         print('Training Finished.')
-        best_score_str = ' '.join(['%s = %.4f' % (k, self.best_score[k]) for k in self.best_score])
-        self.logger.info('[Best score at epoch %d] %s' % (self.best_epoch, best_score_str))
+        score_table.add_row('Best at epoch %d' % self.best_epoch, self.best_score)
+        self.logger.info(score_table.to_string())
 
     def evaluate(self):
-        # pred_matrix = self.model.predict(self.dataset)
         score = self.evaluator.evaluate(self.model, self.dataset, self.test_batch_size)
         return score
-
-    # def cross_validation
