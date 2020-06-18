@@ -2,6 +2,8 @@
 from models.ItemKNN import ItemKNN
 from models.PureSVD import PureSVD
 from models.SLIMElastic import SLIM
+from models.P3a import P3a
+from models.RP3b import RP3b
 from models.EASE import EASE
 
 # Neural
@@ -10,4 +12,4 @@ from models.CDAE import CDAE
 from models.BPRMF import BPRMF
 from models.MultVAE import MultVAE
 
-__all__ = ['ItemKNN', 'PureSVD', 'SLIM', 'EASE', 'DAE', 'CDAE', 'BPRMF', 'MultVAE']
+__all__ = ['ItemKNN', 'PureSVD', 'P3a', 'RP3b', 'SLIM', 'EASE', 'DAE', 'CDAE', 'BPRMF', 'MultVAE']
