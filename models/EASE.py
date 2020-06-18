@@ -20,16 +20,13 @@ class EASE(BaseModel):
         self.to(self.device)
 
     def forward(self, rating_matrix):
-        G = rating_matrix.transpose(0, 1) @ rating_matrix
+        G = train_matrix.T @ train_matrix
 
-        diag = list(range(G.shape[0]))
-        G[diag, diag] += self.reg
-        P = G.inverse()
-
-        # B = P * (X^T * X − diagMat(γ))
-        self.enc_w = P / -torch.diag(P)
-        min_dim = min(*self.enc_w.shape)
-        self.enc_w[range(min_dim), range(min_dim)] = 0
+        diag = np.diag_indices(G.shape[0])
+        G[diag] += self.reg
+        P = np.linalg.inv(G)
+        self.enc_w = P / (-np.diag(P))
+        self.enc_w[diag] = 0
 
         # Calculate the output matrix for prediction
         output = rating_matrix @ self.enc_w
@@ -40,7 +37,7 @@ class EASE(BaseModel):
         self.train()
         
         # Solve EASE
-        train_matrix = torch.FloatTensor(dataset.train_matrix.toarray()).to(self.device)
+        train_matrix = dataset.train_matrix.toarray()
         output = self.forward(train_matrix)
 
         loss = 0.0
