@@ -3,15 +3,15 @@ import numpy as np
 import argparse
 import torch
 
+import models
 from utils.Params import Params
 from utils.Dataset import Dataset
 from utils.Logger import Logger
 from utils.Evaluator import Evaluator
 from utils.Trainer import Trainer
-from utils.ModelBuilder import build_model
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default='slim')
+parser.add_argument('--model', type=str, default='PureSVD')
 parser.add_argument('--data_dir', type=str, default='./data')
 parser.add_argument('--save_dir', type=str, default='./saves')
 parser.add_argument('--conf_dir', type=str, default='./conf')
@@ -41,7 +41,8 @@ eval_pos, eval_target = dataset.eval_data()
 item_popularity = dataset.item_popularity
 evaluator = Evaluator(eval_pos, eval_target, item_popularity, model_conf.top_k)
 
-model = build_model(conf.model, model_conf, dataset.num_users, dataset.num_items, device)
+model_base = getattr(models, conf.model)
+model = model_base(model_conf, dataset.num_users, dataset.num_items, device)
 
 logger.info(model_conf)
 logger.info(dataset)

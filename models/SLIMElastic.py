@@ -12,9 +12,9 @@ from sklearn.linear_model import ElasticNet
 
 from models.BaseModel import BaseModel
 
-class SLIMElastic(BaseModel):
+class SLIM(BaseModel):
     def __init__(self, model_conf, num_users, num_items, device):
-        super(SLIMElastic, self).__init__()
+        super(SLIM, self).__init__()
         self.num_users = num_users
         self.num_items = num_items
 
