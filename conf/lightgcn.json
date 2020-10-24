@@ -1,0 +1,21 @@
+{
+  "data_name": "ml-1m",
+  "train_ratio":0.8,
+
+  "emb_dim": 64,
+  "num_layers": 2,
+  "node_dropout": 0.0,
+  "split": false,
+  "num_folds": 100,
+  "reg": 0.0001,
+  "graph_dir": "graph",
+
+  "num_epochs": 300,
+  "batch_size": 4096,
+  "test_batch_size": 1024,
+  "learning_rate": 0.001,
+  "early_stop": true,
+  "patience": 50,
+
+  "top_k": [100]
+}

@@ -12,3 +12,6 @@ class BaseModel(nn.Module):
 
     def predict(self, eval_users, eval_pos, test_batch_size):
         pass
+
+    def before_evaluate(self):
+        pass
