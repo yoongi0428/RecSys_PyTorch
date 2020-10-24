@@ -28,7 +28,7 @@ class Logger:
 
     def get_log_dir(self, log_dir):
         if not os.path.exists(log_dir):
-            os.mkdir(log_dir)
+            os.makedirs(log_dir)
 
         log_dirs = os.listdir(log_dir)
         if len(log_dirs) == 0:

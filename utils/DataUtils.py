@@ -42,13 +42,15 @@ def preprocess(data_path, save_path, stat_path, sep, train_ratio=0.8, binarize_t
     data['ratings'] = 1.0
 
     num_items_by_user = data.groupby('user', as_index=False).size()
+    num_items_by_user = num_items_by_user.set_index('user')
+    
     num_users_by_item = data.groupby('item', as_index=False).size()
+    num_users_by_item = num_users_by_item.set_index('item')
 
     # assign new user id
     print('Assign new user id...')
-    user_frame = num_items_by_user.to_frame()
+    user_frame = num_items_by_user
     user_frame.columns = ['item_cnt']
-    
     if order_by_popularity: 
         user_frame = user_frame.sort_values(by='item_cnt', ascending=False)
     user_frame['new_id'] = list(range(num_users))
@@ -62,7 +64,7 @@ def preprocess(data_path, save_path, stat_path, sep, train_ratio=0.8, binarize_t
     
     # assign new item id
     print('Assign new item id...')
-    item_frame = num_users_by_item.to_frame()
+    item_frame = num_users_by_item
     item_frame.columns = ['user_cnt']
     if order_by_popularity: 
         item_frame = item_frame.sort_values(by='user_cnt', ascending=False)
@@ -72,7 +74,38 @@ def preprocess(data_path, save_path, stat_path, sep, train_ratio=0.8, binarize_t
     item_id_dict = frame_dict['new_id']
     item_frame = item_frame.set_index('new_id')
     item_to_num_users = item_frame.to_dict()['user_cnt']
+
     data.item = [item_id_dict[x] for x in  data.item.tolist()]
+    
+    # # assign new user id
+    # print('Assign new user id...')
+    # user_frame = num_items_by_user.to_frame()
+    # user_frame.columns = ['item_cnt']
+    
+    # if order_by_popularity: 
+    #     user_frame = user_frame.sort_values(by='item_cnt', ascending=False)
+    # user_frame['new_id'] = list(range(num_users))
+
+    # frame_dict = user_frame.to_dict()
+    # user_id_dict = frame_dict['new_id']
+    # user_frame = user_frame.set_index('new_id')
+    # user_to_num_items = user_frame.to_dict()['item_cnt']
+
+    # data.user = [user_id_dict[x] for x in  data.user.tolist()]
+    
+    # # assign new item id
+    # print('Assign new item id...')
+    # item_frame = num_users_by_item.to_frame()
+    # item_frame.columns = ['user_cnt']
+    # if order_by_popularity: 
+    #     item_frame = item_frame.sort_values(by='user_cnt', ascending=False)
+    # item_frame['new_id'] = range(num_items)
+
+    # frame_dict = item_frame.to_dict()
+    # item_id_dict = frame_dict['new_id']
+    # item_frame = item_frame.set_index('new_id')
+    # item_to_num_users = item_frame.to_dict()['user_cnt']
+    # data.item = [item_id_dict[x] for x in  data.item.tolist()]
 
     num_users, num_items = len(user_id_dict), len(item_id_dict)
     num_ratings = len(data)

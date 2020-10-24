@@ -11,5 +11,7 @@ from models.DAE import DAE
 from models.CDAE import CDAE
 from models.BPRMF import BPRMF
 from models.MultVAE import MultVAE
+from models.NGCF import NGCF
+from models.LightGCN import LightGCN
 
 __all__ = ['ItemKNN', 'PureSVD', 'P3a', 'RP3b', 'SLIM', 'EASE', 'DAE', 'CDAE', 'BPRMF', 'MultVAE']

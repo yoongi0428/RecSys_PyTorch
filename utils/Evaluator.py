@@ -19,6 +19,8 @@ class Evaluator:
     def evaluate(self, model, dataset, test_batch_size):
         model.eval()
 
+        model.before_evaluate()
+
         eval_users = np.array(list(self.eval_target.keys()))
         
         pred_matrix = model.predict(eval_users, self.eval_pos, test_batch_size)
