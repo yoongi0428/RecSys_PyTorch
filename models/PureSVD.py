@@ -1,11 +1,8 @@
-"""
-
-
-
-"""
 import numpy as np
 import scipy.sparse as sp
 from sklearn.utils.extmath import randomized_svd
+import torch
+import torch.nn.functional as F
 from models.BaseModel import BaseModel
 
 class PureSVD(BaseModel):
@@ -31,8 +28,9 @@ class PureSVD(BaseModel):
 
         self.user_embedding = U
         self.item_embedding = s_Vt.T
+        output = self.user_embedding @ self.item_embedding.T
 
-        loss = 0.0
+        loss = F.binary_cross_entropy(torch.tensor(train_matrix), torch.tensor(output))
         
         return loss
 

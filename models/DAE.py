@@ -87,7 +87,7 @@ class DAE(BaseModel):
     def predict(self, eval_users, eval_pos, test_batch_size):
         with torch.no_grad():
             input_matrix = torch.FloatTensor(eval_pos.toarray()).to(self.device)
-            preds = np.zeros_like(input_matrix)
+            preds = np.zeros(eval_pos.shape)
 
             num_data = input_matrix.shape[0]
             num_batches = int(np.ceil(num_data / test_batch_size))
@@ -100,6 +100,8 @@ class DAE(BaseModel):
                 
                 test_batch_matrix = input_matrix[batch_idx]
                 batch_pred_matrix = self.forward(test_batch_matrix)
-                batch_pred_matrix.masked_fill(test_batch_matrix.bool(), float('-inf'))
-                preds[batch_idx] = batch_pred_matrix.detach().cpu().numpy()
+                preds[batch_idx] += batch_pred_matrix.detach().cpu().numpy()
+        
+        preds[eval_pos.nonzero()] = float('-inf')
+        
         return preds

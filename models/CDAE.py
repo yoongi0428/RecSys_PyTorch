@@ -102,6 +102,8 @@ class CDAE(BaseModel):
                 test_batch_matrix = input_matrix[batch_idx]
                 batch_idx = torch.LongTensor(batch_idx).to(self.device)
                 batch_pred_matrix = self.forward(batch_idx, test_batch_matrix)
-                batch_pred_matrix.masked_fill(test_batch_matrix.bool(), float('-inf'))
                 preds[batch_idx] = batch_pred_matrix.detach().cpu().numpy()
+        
+        preds[eval_pos.nonzero()] = float('-inf')
+
         return preds

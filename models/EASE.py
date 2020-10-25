@@ -20,7 +20,7 @@ class EASE(BaseModel):
         self.to(self.device)
 
     def forward(self, rating_matrix):
-        G = train_matrix.T @ train_matrix
+        G = (rating_matrix.T @ rating_matrix).toarray()
 
         diag = np.diag_indices(G.shape[0])
         G[diag] += self.reg
@@ -37,10 +37,10 @@ class EASE(BaseModel):
         self.train()
         
         # Solve EASE
-        train_matrix = dataset.train_matrix.toarray()
+        train_matrix = dataset.train_matrix
         output = self.forward(train_matrix)
 
-        loss = 0.0
+        loss = F.binary_cross_entropy(torch.tensor(train_matrix.toarray()), torch.tensor(output))
         
         return loss
 
@@ -48,20 +48,21 @@ class EASE(BaseModel):
         return self.binomial.sample(mask_shape).to(self.device)
 
     def predict(self, eval_users, eval_pos, test_batch_size):
-        with torch.no_grad():
-            input_matrix = torch.FloatTensor(eval_pos.toarray()).to(self.device)
-            preds = np.zeros_like(input_matrix)
+        input_matrix = eval_pos.toarray()
+        preds = np.zeros_like(input_matrix)
 
-            num_data = input_matrix.shape[0]
-            num_batches = int(np.ceil(num_data / test_batch_size))
-            perm = list(range(num_data))
-            for b in range(num_batches):
-                if (b + 1) * test_batch_size >= num_data:
-                    batch_idx = perm[b * test_batch_size:]
-                else:
-                    batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
-                test_batch_matrix = input_matrix[batch_idx]
-                batch_pred_matrix = (test_batch_matrix @ self.enc_w)
-                batch_pred_matrix.masked_fill(test_batch_matrix.bool(), float('-inf'))
-                preds[batch_idx] = batch_pred_matrix.detach().cpu().numpy()
+        num_data = input_matrix.shape[0]
+        num_batches = int(np.ceil(num_data / test_batch_size))
+        perm = list(range(num_data))
+        for b in range(num_batches):
+            if (b + 1) * test_batch_size >= num_data:
+                batch_idx = perm[b * test_batch_size:]
+            else:
+                batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
+            test_batch_matrix = input_matrix[batch_idx]
+            batch_pred_matrix = (test_batch_matrix @ self.enc_w)
+            preds[batch_idx] = batch_pred_matrix
+            
+        preds[eval_pos.nonzero()] = float('-inf')
+
         return preds

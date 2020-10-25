@@ -16,10 +16,12 @@ def apply_activation(act_name, x):
 class RunningAverage:
     def __init__(self):
         self.sum = 0
+        self.history = []
         self.total = 0
 
     def update(self, value):
         self.sum += value
+        self.history.append(value)
         self.total += 1
 
     @property
