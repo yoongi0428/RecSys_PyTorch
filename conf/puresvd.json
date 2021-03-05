@@ -4,7 +4,7 @@
   "split_random": true,
   "train_ratio":0.8,
 
-  "num_factors": 150,
+  "num_factors": 50,
 
   "num_epochs": 1,
   "batch_size": 1,

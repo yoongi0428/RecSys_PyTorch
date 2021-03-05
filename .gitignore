@@ -3,3 +3,7 @@
 saves/*
 models/TODOs
 data/
+
+**/*.cpp
+**/*.o
+**/*.so

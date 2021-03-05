@@ -11,7 +11,7 @@ from utils.Evaluator import Evaluator
 from utils.Trainer import Trainer
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default='PureSVD')
+parser.add_argument('--model', type=str, default='EASE')
 parser.add_argument('--data_dir', type=str, default='./data')
 parser.add_argument('--save_dir', type=str, default='./saves')
 parser.add_argument('--conf_dir', type=str, default='./conf')
