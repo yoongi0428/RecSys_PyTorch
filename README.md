@@ -26,6 +26,14 @@ Implementations of various top-N recommender systems in [PyTorch](pytorch.org) f
 
 | RecVAE           | Ilya Shenbin et al., RecVAE: A New Variational Autoencoder for Top-N Recommendations with Implicit Feedback. WSDM 2020. [Link](https://arxiv.org/abs/1912.11160) | -->
 
+## Enable C++ evaluation
+To evaluate with C++ backend, you have to compile C++ and cython with the following script:
+```
+python setup.py build_ext --inplace
+```
+
+If compiled NOT successfully, ```"evaluation with python backend.."``` will be printed in the beginning.
+
 ## How to run
 1. Choose RecSys model and edit configurations in ```main.py```
 2. Edit configurations of the model you choose in ```conf```
