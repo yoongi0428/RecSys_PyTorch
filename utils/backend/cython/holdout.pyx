@@ -23,8 +23,6 @@ def compute_holdout(topk, target, metrics_num, Ks):
     target_num = np.zeros([num_eval_users], dtype=int_type)
     target_num_pt = <int *>np.PyArray_DATA(target_num)
     for idx, u in enumerate(target):
-        # if not is_ndarray(ground_truth[u], int_type):
-        #     ground_truth[u] = np.array(ground_truth[u], dtype=int_type, copy=True)
         target[u] = np.array(target[u], dtype=int_type)
         target_pt[idx] = <int *> np.PyArray_DATA (target[u])
         target_num[idx] = len(target[u])
@@ -33,7 +31,6 @@ def compute_holdout(topk, target, metrics_num, Ks):
     cdef int num_k = len(Ks)
     cdef int * Ks_pt = <int *>np.PyArray_DATA(Ks)
 
-    # | M1@10 | M1@100 | M2@10 | M2@100| ...
     results = np.zeros([num_eval_users, metrics_num * num_k], dtype=np.float32)
     results_pt = <float *>np.PyArray_DATA(results)
 

@@ -5,7 +5,7 @@ import numpy as np
 from collections import OrderedDict
 
 from utils.Tools import RunningAverage as AVG
-from utils.backend import predict_topk, compute_holdout
+from utils.backend import predict_topk, compute_holdout, CPP_AVAILABLE
 
 class Evaluator:
     def __init__(self, eval_pos, eval_target, item_popularity, top_k):
@@ -26,8 +26,7 @@ class Evaluator:
 
         pred_matrix = model.predict(eval_users, self.eval_pos, test_batch_size)
 
-        topk = predict_topk(pred_matrix.astype(np.float32), max(self.top_k)).astype(np.int64)
-        # topk = self.predict_topk(pred_matrix, max(self.top_k))
+        topk = predict_topk(pred_matrix.astype(np.float32), max(self.top_k))
         
         # Precision, Recall, NDCG @ k
         scores = self.prec_recall_ndcg(topk, self.eval_target)
@@ -69,48 +68,25 @@ class Evaluator:
         return topk
 
     def prec_recall_ndcg(self, topk, target):
-        results = compute_holdout(topk.astype(np.int32), target, 3, np.array(self.top_k, dtype=np.int32))
+        if CPP_AVAILABLE:
+            results = compute_holdout(topk.astype(np.int32), target, 3, np.array(self.top_k, dtype=np.int32))
 
-        prec = {k: AVG() for k in self.top_k}
-        recall = {k: AVG() for k in self.top_k}
-        ndcg = {k: AVG() for k in self.top_k}
-        scores = {
-            'Prec': prec,
-            'Recall': recall,
-            'NDCG': ndcg
-        }
+            prec = {k: AVG() for k in self.top_k}
+            recall = {k: AVG() for k in self.top_k}
+            ndcg = {k: AVG() for k in self.top_k}
+            scores = {
+                'Prec': prec,
+                'Recall': recall,
+                'NDCG': ndcg
+            }
 
-        for idx, u in enumerate(target):
-            user_results = results[idx].tolist()
-            for i, metric in enumerate(['Prec', 'Recall', 'NDCG']):
-                for j, k in enumerate(self.top_k):
-                    scores[metric][k].update(user_results[i * len(self.top_k) + j])
-
-        # for idx, u in enumerate(target):
-        #     pred_u = topk[idx]
-        #     target_u = target[u]
-        #     num_target_items = len(target_u)
-        #     for k in self.top_k:
-        #         pred_k = pred_u[:k]
-        #         hits_k = [(i + 1, item) for i, item in enumerate(pred_k) if item in target_u]
-        #         num_hits = len(hits_k)
-
-        #         idcg_k = 0.0
-        #         for i in range(1, min(num_target_items, k) + 1):
-        #             idcg_k += 1 / math.log(i + 1, 2)
-
-        #         dcg_k = 0.0
-        #         for idx, item in hits_k:
-        #             dcg_k += 1 / math.log(idx + 1, 2)
-                
-        #         prec_k = num_hits / k
-        #         recall_k = num_hits / min(num_target_items, k)
-        #         ndcg_k = dcg_k / idcg_k
-
-        #         scores['Prec'][k].update(prec_k)
-        #         scores['Recall'][k].update(recall_k)
-        #         scores['NDCG'][k].update(ndcg_k)
-
+            for idx, u in enumerate(target):
+                user_results = results[idx].tolist()
+                for i, metric in enumerate(['Prec', 'Recall', 'NDCG']):
+                    for j, k in enumerate(self.top_k):
+                        scores[metric][k].update(user_results[i * len(self.top_k) + j])
+        else:
+            scores = compute_holdout(topk.astype(np.int32), target, self.top_k)
         return scores
 
     def novelty(self, topk):
