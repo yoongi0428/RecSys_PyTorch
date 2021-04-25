@@ -1,0 +1,4 @@
+hparams:
+    shrink: 100
+    feature_weighting: 'none'
+    topk: 100

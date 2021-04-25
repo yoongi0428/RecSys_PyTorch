@@ -6,15 +6,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.BaseModel import BaseModel
+from .BaseModel import BaseModel
 
 class EASE(BaseModel):
-    def __init__(self, model_conf, num_users, num_items, device):
+    def __init__(self, dataset, hparams, device):
         super(EASE, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
+        self.num_users = dataset.num_users
+        self.num_items = dataset.num_items
 
-        self.reg = model_conf.reg
+        self.reg = hparams['reg']
 
         self.device = device
         self.to(self.device)
@@ -33,19 +33,26 @@ class EASE(BaseModel):
 
         return output
 
-    def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
+    def fit(self, dataset, exp_config, evaluator=None, early_stop=None, loggers=None):
         self.train()
         
         # Solve EASE
-        train_matrix = dataset.train_matrix
+        train_matrix = dataset.train_data
         output = self.forward(train_matrix)
 
         loss = F.binary_cross_entropy(torch.tensor(train_matrix.toarray()), torch.tensor(output))
-        
-        return loss
 
-    def generate_mask(self, mask_shape):
-        return self.binomial.sample(mask_shape).to(self.device)
+        if evaluator is not None:
+            scores = evaluator.evaluate(self)
+        else:
+            scores = None
+        
+        if loggers is not None:
+            if evaluator is not None:
+                for logger in loggers:
+                    logger.log_metrics(scores, epoch=1)
+        
+        return {'scores': scores, 'loss': loss}
 
     def predict(self, eval_users, eval_pos, test_batch_size):
         input_matrix = eval_pos.toarray()

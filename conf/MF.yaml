@@ -1,0 +1,4 @@
+hparams:
+    hidden_dim: 50
+    pointwise: False
+    loss_func: "ce"

@@ -12,22 +12,22 @@ from tqdm import tqdm
 from models.BaseModel import BaseModel
 
 class ItemKNN(BaseModel):
-    def __init__(self, model_conf, num_users, num_items, device):
+    def __init__(self, dataset, hparams, device):
         super(ItemKNN, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
+        self.num_users = dataset.num_users
+        self.num_items = dataset.num_items
 
-        self.topk = model_conf.topk
-        self.shrink = model_conf.shrink
-        self.feature_weighting = model_conf.feature_weighting
+        self.topk = hparams['topk']
+        self.shrink = hparams['shrink']
+        self.feature_weighting = hparams['feature_weighting']
         assert self.feature_weighting in ['tf-idf', 'bm25', 'none']
 
-    def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
-        train_matrix = dataset.train_matrix
+    def fit_knn(self, train_matrix, block_size=500):
         if self.feature_weighting == 'tf-idf':
             train_matrix = self.TF_IDF(train_matrix.T).T
         elif self.feature_weighting == 'bm25':
             train_matrix = self.okapi_BM25(train_matrix.T).T
+        
         train_matrix = train_matrix.tocsc()
         num_items = train_matrix.shape[1]
 
@@ -95,17 +95,48 @@ class ItemKNN(BaseModel):
         self.W_sparse = sp.csr_matrix((values, (rows, cols)),
                             shape=(num_items, num_items),
                             dtype=np.float32)
-        # sp.save_npz(os.path.join(log_dir, 'best_model'), self.W_sparse)
+    
+    def fit(self, dataset, exp_config, evaluator=None, early_stop=None, loggers=None):
+        train_matrix = dataset.train_data
+        self.fit_knn(train_matrix)
 
-        return 0.0
+        output = train_matrix @ self.W_sparse
+
+        loss = F.binary_cross_entropy(torch.tensor(train_matrix.toarray()), torch.tensor(output.toarray()))
+
+        if evaluator is not None:
+            scores = evaluator.evaluate(self)
+        else:
+            scores = None
+        
+        if loggers is not None:
+            if evaluator is not None:
+                for logger in loggers:
+                    logger.log_metrics(scores, epoch=1)
+        
+        return {'scores': scores, 'loss': loss}
 
     def predict(self, eval_users, eval_pos, test_batch_size):
-        # eval_pos_matrix
-        preds = (eval_pos * self.W_sparse).toarray()
+        input_matrix = eval_pos.toarray()
+        preds = np.zeros_like(input_matrix)
+
+        num_data = input_matrix.shape[0]
+        num_batches = int(np.ceil(num_data / test_batch_size))
+        perm = list(range(num_data))
+        for b in range(num_batches):
+            if (b + 1) * test_batch_size >= num_data:
+                batch_idx = perm[b * test_batch_size:]
+            else:
+                batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
+            test_batch_matrix = input_matrix[batch_idx]
+            batch_pred_matrix = (test_batch_matrix @ self.W_sparse)
+            preds[batch_idx] = batch_pred_matrix
+            
         preds[eval_pos.nonzero()] = float('-inf')
+
         return preds
 
-    def okapi_BM25(self, dataMatrix, K1=1.2, B=0.75):
+    def okapi_BM25(self, rating_matrix, K1=1.2, B=0.75):
         assert B>0 and B<1, "okapi_BM_25: B must be in (0,1)"
         assert K1>0,        "okapi_BM_25: K1 must be > 0"
 
@@ -113,23 +144,23 @@ class ItemKNN(BaseModel):
         # Weighs each row of a sparse matrix by OkapiBM25 weighting
         # calculate idf per term (user)
 
-        dataMatrix = sp.coo_matrix(dataMatrix)
+        rating_matrix = sp.coo_matrix(rating_matrix)
 
-        N = float(dataMatrix.shape[0])
-        idf = np.log(N / (1 + np.bincount(dataMatrix.col)))
+        N = float(rating_matrix.shape[0])
+        idf = np.log(N / (1 + np.bincount(rating_matrix.col)))
 
         # calculate length_norm per document
-        row_sums = np.ravel(dataMatrix.sum(axis=1))
+        row_sums = np.ravel(rating_matrix.sum(axis=1))
 
         average_length = row_sums.mean()
         length_norm = (1.0 - B) + B * row_sums / average_length
 
         # weight matrix rows by bm25
-        dataMatrix.data = dataMatrix.data * (K1 + 1.0) / (K1 * length_norm[dataMatrix.row] + dataMatrix.data) * idf[dataMatrix.col]
+        rating_matrix.data = rating_matrix.data * (K1 + 1.0) / (K1 * length_norm[rating_matrix.row] + rating_matrix.data) * idf[rating_matrix.col]
 
-        return dataMatrix.tocsr()
+        return rating_matrix.tocsr()
 
-    def TF_IDF(self, matrix):
+    def TF_IDF(self, rating_matrix):
         """
         Items are assumed to be on rows
         :param dataMatrix:
@@ -137,13 +168,13 @@ class ItemKNN(BaseModel):
         """
 
         # TFIDF each row of a sparse amtrix
-        dataMatrix = sp.coo_matrix(matrix)
-        N = float(dataMatrix.shape[0])
+        rating_matrix = sp.coo_matrix(rating_matrix)
+        N = float(rating_matrix.shape[0])
 
         # calculate IDF
-        idf = np.log(N / (1 + np.bincount(dataMatrix.col)))
+        idf = np.log(N / (1 + np.bincount(rating_matrix.col)))
 
         # apply TF-IDF adjustment
-        dataMatrix.data = np.sqrt(dataMatrix.data) * idf[dataMatrix.col]
+        rating_matrix.data = np.sqrt(rating_matrix.data) * idf[rating_matrix.col]
 
-        return dataMatrix.tocsr()
+        return rating_matrix.tocsr()

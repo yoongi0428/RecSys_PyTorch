@@ -6,33 +6,39 @@ import torch.nn.functional as F
 from models.BaseModel import BaseModel
 
 class PureSVD(BaseModel):
-    def __init__(self, model_conf, num_users, num_items, device):
+    def __init__(self, dataset, hparams, device):
         super(PureSVD, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
+        self.num_users = dataset.num_users
+        self.num_items = dataset.num_items
 
-        self.num_factors = model_conf.num_factors
-
+        self.num_factors = hparams['num_factors']
         self.device = device
 
-    def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
-        self.train()
-        
+    def fit(self, dataset, exp_config, evaluator=None, early_stop=None, loggers=None):
         # Solve EASE
-        train_matrix = dataset.train_matrix.toarray()
-        U, sigma, Vt = randomized_svd(train_matrix,
-                                      n_components=self.num_factors,
-                                      random_state=123)
+        train_matrix = dataset.train_data.toarray()
+        U, sigma, Vt = randomized_svd(train_matrix, n_components=self.num_factors, random_state=123)
 
         s_Vt = sp.diags(sigma) * Vt
 
         self.user_embedding = U
         self.item_embedding = s_Vt.T
+
         output = self.user_embedding @ self.item_embedding.T
 
         loss = F.binary_cross_entropy(torch.tensor(train_matrix), torch.tensor(output))
         
-        return loss
+        if evaluator is not None:
+            scores = evaluator.evaluate(self)
+        else:
+            scores = None
+        
+        if loggers is not None:
+            if evaluator is not None:
+                for logger in loggers:
+                    logger.log_metrics(scores, epoch=1)
+        
+        return {'scores': scores, 'loss': loss}
 
     def predict_batch_users(self, user_ids):
         user_latent = self.user_embedding[user_ids]

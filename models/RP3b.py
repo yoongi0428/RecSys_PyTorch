@@ -4,6 +4,8 @@ https://www.zora.uzh.ch/id/eprint/131338/1/TiiS_2016.pdf
 
 Main model codes from https://github.com/MaurizioFD/RecSys2019_DeepLearning_Evaluation
 """
+import torch
+import torch.nn.functional as F
 import numpy as np
 import scipy.sparse as sp
 from sklearn.preprocessing import normalize
@@ -12,17 +14,16 @@ from tqdm import tqdm
 from models.BaseModel import BaseModel
 
 class RP3b(BaseModel):
-    def __init__(self, model_conf, num_users, num_items, device):
+    def __init__(self, dataset, hparams, device):
         super(RP3b, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
+        self.num_users = dataset.num_users
+        self.num_items = dataset.num_items
 
-        self.topk = model_conf.topk
-        self.alpha = model_conf.alpha
-        self.beta = model_conf.beta
+        self.topk = hparams['topk']
+        self.alpha = hparams['alpha']
+        self.beta = hparams['beta']
 
-    def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
-        train_matrix = dataset.train_matrix.tocsc()
+    def fit_rp3b(self, train_matrix, block_dim=200):
         num_items = train_matrix.shape[1]
 
         Pui = normalize(train_matrix, norm='l1', axis=1)
@@ -45,9 +46,6 @@ class RP3b(BaseModel):
         if self.alpha != 1:
             Pui = Pui.power(self.alpha)
             Piu = Piu.power(self.alpha)
-
-        block_dim = 200
-        # d_t = Piu
 
         # Use array as it reduces memory requirements compared to lists
         dataBlock = 10000000
@@ -99,9 +97,26 @@ class RP3b(BaseModel):
                     numCells += 1
 
         self.W_sparse = sp.csr_matrix((values[:numCells], (rows[:numCells], cols[:numCells])), shape=(Pui.shape[1], Pui.shape[1]))
-        # sp.save_npz(os.path.join(log_dir, 'best_model'), self.W_sparse)
+    
+    def fit(self, dataset, exp_config, evaluator=None, early_stop=None, loggers=None):
+        train_matrix = dataset.train_data
+        self.fit_rp3b(train_matrix.tocsc())
 
-        return 0.0
+        output = train_matrix @ self.W_sparse
+
+        loss = F.binary_cross_entropy(torch.tensor(train_matrix.toarray()), torch.tensor(output.toarray()))
+
+        if evaluator is not None:
+            scores = evaluator.evaluate(self)
+        else:
+            scores = None
+        
+        if loggers is not None:
+            if evaluator is not None:
+                for logger in loggers:
+                    logger.log_metrics(scores, epoch=1)
+        
+        return {'scores': scores, 'loss': loss}
 
     def predict(self, eval_users, eval_pos, test_batch_size):
         # eval_pos_matrix

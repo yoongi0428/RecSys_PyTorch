@@ -4,6 +4,8 @@ http://wwwconference.org/proceedings/www2014/companion/p811.pdf
 
 Main model codes from https://github.com/MaurizioFD/RecSys2019_DeepLearning_Evaluation
 """
+import torch
+import torch.nn.functional as F
 import numpy as np
 import scipy.sparse as sp
 from sklearn.preprocessing import normalize
@@ -12,16 +14,15 @@ from tqdm import tqdm
 from models.BaseModel import BaseModel
 
 class P3a(BaseModel):
-    def __init__(self, model_conf, num_users, num_items, device):
+    def __init__(self, dataset, hparams, device):
         super(P3a, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
+        self.num_users = dataset.num_users
+        self.num_items = dataset.num_items
 
-        self.topk = model_conf.topk
-        self.alpha = model_conf.alpha
+        self.topk =  hparams['topk']
+        self.alpha = hparams['alpha']
 
-    def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
-        train_matrix = dataset.train_matrix.tocsc()
+    def fit_p3a(self, train_matrix, block_dim=200):
         num_items = train_matrix.shape[1]
 
         # (user, item), 1 / # user
@@ -37,9 +38,6 @@ class P3a(BaseModel):
         if self.alpha != 1:
             Pui = Pui.power(self.alpha)
             Piu = Piu.power(self.alpha)
-
-        block_dim = 200
-        # d_t = Piu
 
         # Use array as it reduces memory requirements compared to lists
         dataBlock = 10000000
@@ -91,12 +89,43 @@ class P3a(BaseModel):
                     numCells += 1
 
         self.W_sparse = sp.csr_matrix((values[:numCells], (rows[:numCells], cols[:numCells])), shape=(Pui.shape[1], Pui.shape[1]))
-        # sp.save_npz(os.path.join(log_dir, 'best_model'), self.W_sparse)
+    
+    def fit(self, dataset, exp_config, evaluator=None, early_stop=None, loggers=None):
+        train_matrix = dataset.train_data
+        self.fit_p3a(train_matrix.tocsc())
 
-        return 0.0
+        output = train_matrix @ self.W_sparse
+
+        loss = F.binary_cross_entropy(torch.tensor(train_matrix.toarray()), torch.tensor(output.toarray()))
+
+        if evaluator is not None:
+            scores = evaluator.evaluate(self)
+        else:
+            scores = None
+        
+        if loggers is not None:
+            if evaluator is not None:
+                for logger in loggers:
+                    logger.log_metrics(scores, epoch=1)
+        
+        return {'scores': scores, 'loss': loss}
 
     def predict(self, eval_users, eval_pos, test_batch_size):
-        # eval_pos_matrix
-        preds = (eval_pos * self.W_sparse).toarray()
+        input_matrix = eval_pos.toarray()
+        preds = np.zeros_like(input_matrix)
+
+        num_data = input_matrix.shape[0]
+        num_batches = int(np.ceil(num_data / test_batch_size))
+        perm = list(range(num_data))
+        for b in range(num_batches):
+            if (b + 1) * test_batch_size >= num_data:
+                batch_idx = perm[b * test_batch_size:]
+            else:
+                batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
+            test_batch_matrix = input_matrix[batch_idx]
+            batch_pred_matrix = (test_batch_matrix @ self.W_sparse)
+            preds[batch_idx] = batch_pred_matrix
+            
         preds[eval_pos.nonzero()] = float('-inf')
+
         return preds

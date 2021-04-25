@@ -7,7 +7,7 @@ class BaseModel(nn.Module):
     def forward(self, *input):
         pass
 
-    def train_one_epoch(self, *input):
+    def fit(self, *input):
         pass
 
     def predict(self, eval_users, eval_pos, test_batch_size):

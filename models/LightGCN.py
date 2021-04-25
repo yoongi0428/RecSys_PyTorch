@@ -13,29 +13,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.BaseModel import BaseModel
+from .BaseModel import BaseModel
+from data.generators import PairwiseGenerator
 
 class LightGCN(BaseModel):
-    def __init__(self, model_conf, num_user, num_item, device):
+    def __init__(self, dataset, hparams, device):
         super(LightGCN, self).__init__()
-        self.data_name = model_conf.data_name
-        self.num_users = num_user
-        self.num_items = num_item
+        self.data_name = dataset.dataname
+        self.num_users = dataset.num_users
+        self.num_items = dataset.num_items
 
-        self.emb_dim = model_conf.emb_dim
-        self.num_layers = model_conf.num_layers
-        self.node_dropout = model_conf.node_dropout
+        self.emb_dim = hparams['emb_dim']
+        self.num_layers = hparams['num_layers']
+        self.node_dropout = hparams['node_dropout']
 
-        # self.num_negatives = model_conf['num_negatives']
-        self.split = model_conf.split
-        self.num_folds = model_conf.num_folds
+        self.split = hparams['split']
+        self.num_folds = hparams['num_folds']
 
-        self.reg = model_conf.reg
-        self.batch_size = model_conf.batch_size
+        self.reg = hparams['reg']
         
         self.Graph = None
         self.data_loader = None
-        self.path = model_conf.graph_dir
+        self.path = hparams['graph_dir']
         if not os.path.exists(self.path):
             os.mkdir(self.path)
 
@@ -43,9 +42,9 @@ class LightGCN(BaseModel):
 
         self.build_graph()
 
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+
     def build_graph(self):
-        # Variable
-        # torch.ones(self.num_users, self.emb_dim)
         self.user_embedding = nn.Embedding(self.num_users, self.emb_dim)
         self.item_embedding = nn.Embedding(self.num_items, self.emb_dim)
         nn.init.normal_(self.user_embedding.weight, 0, 0.01)
@@ -56,58 +55,81 @@ class LightGCN(BaseModel):
 
         self.to(self.device)
 
-    def forward(self, user, pos, neg=None):
-        u_embedding, i_embedding = self.lightgcn_embedding(self.Graph)
-
-        user_latent = F.embedding(user, u_embedding)
-        pos_latent = F.embedding(pos, i_embedding)
-        
-        pos_score = torch.mul(user_latent, pos_latent).sum(1)
-        if neg is not None:
-            neg_latent = F.embedding(neg, i_embedding)
-            neg_score = torch.mul(user_latent, neg_latent).sum(1)
-            return pos_score, neg_score
-        else:
-            return pos_score
+    def update_lightgcn_embedding(self):
+        self.user_embeddings, self.item_embeddings = self._lightgcn_embedding(self.Graph)
     
-    def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
-        train_matrix = dataset.train_matrix
+    def forward(self, user_ids, item_ids):
+        user_emb = F.embedding(user_ids, self.user_embeddings)
+        item_emb = F.embedding(item_ids, self.item_embeddings)
+        
+        pred_rating = torch.sum(torch.mul(user_emb, item_emb), 1)
+        return pred_rating
+    
+    def fit(self, dataset, exp_config, evaluator=None, early_stop=None, loggers=None):
+        train_matrix = dataset.train_data
+        self.Graph = self.getSparseGraph(train_matrix)
+        
+        batch_generator = PairwiseGenerator(
+                train_matrix, num_negatives=1, num_positives_per_user=1,
+                batch_size=exp_config.batch_size, shuffle=True, device=self.device)
 
-        if self.Graph == None:
-            self.Graph = self.getSparseGraph(train_matrix)
-        if self.data_loader == None:
-            self.data_loader = PairwiseGenerator(train_matrix, num_negatives=1, batch_size=self.batch_size, shuffle=True, device=self.device)
+        num_batches = len(batch_generator)
+        for epoch in range(1, exp_config.num_epochs + 1):
+            self.train()
+            epoch_loss = 0.0
+            
+            for b, (batch_users, batch_pos, batch_neg) in enumerate(batch_generator):
+                self.optimizer.zero_grad()
 
-        loss = 0.0
-        for b, batch_data in enumerate(self.data_loader):
-            optimizer.zero_grad()
-            batch_user, batch_pos, batch_neg = batch_data
+                batch_loss = self.process_one_batch(batch_users, batch_pos, batch_neg)
+                batch_loss.backward()
+                self.optimizer.step()
 
-            pos_output, neg_output = self.forward(batch_user, batch_pos, batch_neg)
-            userEmb0 = self.user_embedding(batch_user)
-            posEmb0 = self.item_embedding(batch_pos)
-            negEmb0 = self.item_embedding(batch_neg)
+                epoch_loss += batch_loss
 
-            batch_loss = torch.mean(F.softplus(neg_output - pos_output))
-            reg_loss = (1/2) * (userEmb0.norm(2).pow(2) + posEmb0.norm(2).pow(2) + negEmb0.norm(2).pow(2)) / float(len(batch_user))
+                if exp_config.verbose and b % 50 == 0:
+                    print('(%3d / %3d) loss = %.4f' % (b, num_batches, batch_loss))
+            
+            epoch_summary = {'loss': epoch_loss}
+            
+            # Evaluate if necessary
+            if evaluator is not None and epoch >= exp_config.test_from and epoch % exp_config.test_step == 0:
+                scores = evaluator.evaluate(self)
+                epoch_summary.update(scores)
+                
+                if loggers is not None:
+                    for logger in loggers:
+                        logger.log_metrics(epoch_summary, epoch=epoch)
 
-            batch_loss = batch_loss + self.reg * reg_loss
+                ## Check early stop
+                if early_stop is not None:
+                    is_update, should_stop = early_stop.step(scores, epoch)
+                    if should_stop:
+                        break
+            else:
+                if loggers is not None:
+                    for logger in loggers:
+                        logger.log_metrics(epoch_summary, epoch=epoch)
 
-            batch_loss.backward()
-            optimizer.step()
+        best_score = early_stop.best_score if early_stop is not None else scores
+        return {'scores': best_score}
+    
+    def process_one_batch(self, users, pos_items, neg_items):
+        self.update_lightgcn_embedding()
 
-            loss += batch_loss
-
-            if verbose and b % 50 == 0:
-                print('(%3d / %3d) loss = %.4f' % (b, num_batches, batch_loss))
+        pos_scores = self.forward(users, pos_items)
+        neg_scores = self.forward(users, neg_items)
+        loss = -F.sigmoid(pos_scores - neg_scores).log().mean()
         return loss
 
     def predict_batch_users(self, user_ids):
-        user_embeddings = F.embedding(user_ids, self.user_embedding_pred)
-        item_embeddings = self.item_embedding_pred
+        user_embeddings = F.embedding(user_ids, self.user_embeddings)
+        item_embeddings = self.item_embeddings
         return user_embeddings @ item_embeddings.T
 
     def predict(self, eval_users, eval_pos, test_batch_size):
+        self.update_lightgcn_embedding()
+
         num_eval_users = len(eval_users)
         num_batches = int(np.ceil(num_eval_users / test_batch_size))
         pred_matrix = np.zeros(eval_pos.shape)
@@ -127,8 +149,6 @@ class LightGCN(BaseModel):
 
         return pred_matrix
     
-    def before_evaluate(self):
-        self.user_embedding_pred, self.item_embedding_pred = self.lightgcn_embedding(self.Graph)
 
     ##################################### LightGCN Code
     def __dropout_x(self, x, keep_prob):
@@ -151,7 +171,7 @@ class LightGCN(BaseModel):
             graph = self.__dropout_x(self.Graph, keep_prob)
         return graph
 
-    def lightgcn_embedding(self, graph):
+    def _lightgcn_embedding(self, graph):
         users_emb = self.user_embedding.weight
         items_emb = self.item_embedding.weight
         all_emb = torch.cat([users_emb, items_emb])
@@ -245,60 +265,3 @@ class LightGCN(BaseModel):
             Graph = Graph.coalesce().to(self.device)
             print("don't split the matrix")
         return Graph
-
-################ CUSTOM SAMPLER
-class PairwiseGenerator:
-    def __init__(self, input_matrix, num_negatives=1, batch_size=32, shuffle=True, device=None):
-        super().__init__()
-        self.input_matrix = input_matrix
-        self.num_negatives = num_negatives
-        self.num_users, self.num_items = input_matrix.shape
-        
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.device = device
-
-        self._construct()
-
-    def _construct(self):
-        self.pos_dict = {}
-        for u in range(self.num_users):
-            u_items = self.input_matrix[u].indices
-            
-            self.pos_dict[u] = u_items.tolist()
-
-    def __len__(self):  
-        return int(np.ceil(self.num_users / self.batch_size))
-
-    def __iter__(self):
-        if self.shuffle:
-            perm = np.random.permutation(self.num_users) 
-        else:
-            perm = np.arange(self.num_users)
-
-        for b, st in enumerate(range(0, len(perm), self.batch_size)):
-            batch_pos = []
-            batch_neg = []
-
-            ed = min(st + self.batch_size, len(perm))
-            batch_users = perm[st:ed]
-            for i, u in enumerate(batch_users):
-
-                posForUser = self.pos_dict[u]
-                if len(posForUser) == 0:
-                    continue
-                posindex = np.random.randint(0, len(posForUser))
-                positem = posForUser[posindex]
-                while True:
-                    negitem = np.random.randint(0, self.num_items)
-                    if negitem in posForUser:
-                        continue
-                    else:
-                        break
-                batch_pos.append(positem)
-                batch_neg.append(negitem)
-
-            batch_users = torch.tensor(batch_users, dtype=torch.long, device=self.device)
-            batch_pos = torch.tensor(batch_pos, dtype=torch.long, device=self.device)
-            batch_neg = torch.tensor(batch_neg, dtype=torch.long, device=self.device)
-            yield batch_users, batch_pos, batch_neg

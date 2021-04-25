@@ -1,0 +1,11 @@
+hparams:
+    emb_dim: 64
+    num_layers: 2
+    node_dropout: 0.0
+    mess_dropout: 0.1
+    split: false
+    num_folds: 100
+    
+    graph_dir: "graph"
+
+    reg: 0.0001

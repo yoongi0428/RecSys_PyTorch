@@ -1,0 +1,4 @@
+hparams:
+    hidden_dim: 200
+    corruption_ratio: 0.5
+    act: 'tanh'

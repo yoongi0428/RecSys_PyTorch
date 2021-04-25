@@ -1,0 +1,4 @@
+hparams:
+    l1_reg: 0.001
+    l2_reg: 0.001
+    topk: 100

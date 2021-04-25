@@ -10,17 +10,17 @@ import scipy.sparse as sp
 from tqdm import tqdm
 from sklearn.linear_model import ElasticNet
 
-from models.BaseModel import BaseModel
+from .BaseModel import BaseModel
 
 class SLIM(BaseModel):
-    def __init__(self, model_conf, num_users, num_items, device):
+    def __init__(self, dataset, hparams, device):
         super(SLIM, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
+        self.num_users = dataset.num_users
+        self.num_items = dataset.num_items
 
-        self.l1_reg = model_conf.l1_reg
-        self.l2_reg = model_conf.l2_reg
-        self.topk = model_conf.topk
+        self.l1_reg = hparams['l1_reg']
+        self.l2_reg = hparams['l2_reg']
+        self.topk = hparams['topk']
 
         self.device = device
 
@@ -36,16 +36,13 @@ class SLIM(BaseModel):
                                 max_iter=300,
                                 tol=1e-3)
 
-    def train_one_epoch(self, dataset, optimizer, batch_size, verbose):
-        train_matrix = dataset.train_matrix.tocsc()
+    def fit_slim(self, train_matrix, num_blocks=10000000):
         num_items = train_matrix.shape[1]
 
         # Use array as it reduces memory requirements compared to lists
-        dataBlock = 10000000
-
-        rows = np.zeros(dataBlock, dtype=np.int32)
-        cols = np.zeros(dataBlock, dtype=np.int32)
-        values = np.zeros(dataBlock, dtype=np.float32)
+        rows = np.zeros(num_blocks, dtype=np.int32)
+        cols = np.zeros(num_blocks, dtype=np.int32)
+        values = np.zeros(num_blocks, dtype=np.float32)
 
         numCells = 0
         tqdm_iterator = tqdm(range(num_items), desc='# items covered', total=num_items)
@@ -83,9 +80,9 @@ class SLIM(BaseModel):
             for index in range(len(ranking)):
 
                 if numCells == len(rows):
-                    rows = np.concatenate((rows, np.zeros(dataBlock, dtype=np.int32)))
-                    cols = np.concatenate((cols, np.zeros(dataBlock, dtype=np.int32)))
-                    values = np.concatenate((values, np.zeros(dataBlock, dtype=np.float32)))
+                    rows = np.concatenate((rows, np.zeros(num_blocks, dtype=np.int32)))
+                    cols = np.concatenate((cols, np.zeros(num_blocks, dtype=np.int32)))
+                    values = np.concatenate((values, np.zeros(num_blocks, dtype=np.float32)))
 
 
                 rows[numCells] = nonzero_model_coef_index[ranking[index]]
@@ -97,11 +94,43 @@ class SLIM(BaseModel):
             train_matrix.data[start_pos:end_pos] = current_item_data_backup
         
         self.W_sparse = sp.csr_matrix((values[:numCells], (rows[:numCells], cols[:numCells])), shape=(num_items, num_items), dtype=np.float32)
+    
+    def fit(self, dataset, exp_config, evaluator=None, early_stop=None, loggers=None):
+        train_matrix = dataset.train_data.tocsc()
+        self.fit_slim(train_matrix)
 
-        return 0.0
+        output = train_matrix.tocsr() @ self.W_sparse
+
+        loss = F.binary_cross_entropy(torch.tensor(train_matrix.toarray()), torch.tensor(output.toarray()))
+
+        if evaluator is not None:
+            scores = evaluator.evaluate(self)
+        else:
+            scores = None
+        
+        if loggers is not None:
+            if evaluator is not None:
+                for logger in loggers:
+                    logger.log_metrics(scores, epoch=1)
+        
+        return {'scores': scores, 'loss': loss}
 
     def predict(self, eval_users, eval_pos, test_batch_size):
-        # eval_pos_matrix
-        preds = (eval_pos * self.W_sparse).toarray()
+        input_matrix = eval_pos.toarray()
+        preds = np.zeros_like(input_matrix)
+
+        num_data = input_matrix.shape[0]
+        num_batches = int(np.ceil(num_data / test_batch_size))
+        perm = list(range(num_data))
+        for b in range(num_batches):
+            if (b + 1) * test_batch_size >= num_data:
+                batch_idx = perm[b * test_batch_size:]
+            else:
+                batch_idx = perm[b * test_batch_size: (b + 1) * test_batch_size]
+            test_batch_matrix = input_matrix[batch_idx]
+            batch_pred_matrix = (test_batch_matrix @ self.W_sparse)
+            preds[batch_idx] = batch_pred_matrix
+            
         preds[eval_pos.nonzero()] = float('-inf')
+
         return preds
