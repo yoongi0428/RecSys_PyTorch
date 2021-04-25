@@ -3,7 +3,7 @@ from Cython.Build import cythonize
 import numpy as np
 import os
 
-pyx_directories = ["utils/backend/cython/"]
+pyx_directories = ["evaluation/backend/cython"]
 cpp_dirs = ["evaluation/backend/cython/include"]
 
 pwd = os.getcwd()
