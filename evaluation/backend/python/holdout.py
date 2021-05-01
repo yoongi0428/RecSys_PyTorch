@@ -3,8 +3,10 @@ from collections import OrderedDict
 import numpy as np
 
 from utils.stats import Statistics
+from .. import HOLDOUT_METRICS
+# from evaluation.backend import HOLDOUT_METRICS
 
-HOLDOUT_METRICS = ['Prec', 'Recall', 'NDCG']
+# HOLDOUT_METRICS = ['Prec', 'Recall', 'NDCG']
 
 def compute_holdout_metrics_py(pred, target, ks):
     score_cumulator = OrderedDict()

@@ -22,18 +22,18 @@ class Statistics:
     @property
     def mean_std(self):
         # mean = self.sum / self.cnt
-        mean = np.mean(self.history)
-        std = np.std(self.history)
+        mean = np.mean(self.history, dtype=np.float32)
+        std = np.std(self.history, dtype=np.float32)
         return mean, std
 
     @property
     def mean(self):
         # return self.sum / self.cnt
-        return np.mean(self.history)
+        return np.mean(self.history, dtype=np.float32)
 
     @property
     def std(self):
-        return np.std(self.history)
+        return np.std(self.history, dtype=np.float32)
 
     def __repr__(self):
         return '%s: mean=%.4f, std=%.4f' % (self.name, self.mean, self.std)

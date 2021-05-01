@@ -13,7 +13,7 @@ class DatasetConfig:
     min_item_per_user:int=10
     min_user_per_item:int=1
 
-    protocol:str='leave_one_out' # holdout, leave_one_out
+    protocol:str='holdout' # holdout, leave_one_out
     generalization:str='weak' # weak/strong
     holdout_users:int=600
 
@@ -24,7 +24,7 @@ class DatasetConfig:
 
 @dataclass
 class EvaluatorConfig:
-    ks:List[int] = field(default_factory=lambda: [10, 20, 30])
+    ks:List[int] = field(default_factory=lambda: [5])
 
 @dataclass
 class EarlyStopConfig:
@@ -41,16 +41,10 @@ class ExperimentConfig:
     print_step:int=1
     test_step:int=1
     test_from:int=1
-    model_name:str='LightGCN'
+    model_name:str='EASE'
     num_exp:int=5
     seed:int=2020
     gpu:int=0
-
-# @dataclass
-# class ParamSearchConfig:
-#     param_search:bool=False
-#     search_method:str='grid' # grid / bayesian
-#     num_trials:int=30
 
 def load_config():
     dataset_config = OmegaConf.structured({'dataset' :DatasetConfig})

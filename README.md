@@ -35,8 +35,8 @@ python setup.py build_ext --inplace
 If compiled NOT successfully, ```"evaluation with python backend.."``` will be printed in the beginning.
 
 ## How to run
-1. Choose RecSys model and edit configurations in ```main.py```
-2. Edit configurations of the model you choose in ```conf```
+1. Edit experiment configurations in ```config.py```
+2. Edit model hyperparameters you choose in ```conf/[MODEL_NAME]```
 3. run ```main.py```
 
 ## Implement your own model

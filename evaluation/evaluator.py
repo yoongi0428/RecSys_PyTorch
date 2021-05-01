@@ -1,5 +1,6 @@
 import time
 import numpy as np
+from typing import Iterable
 from collections import OrderedDict
 
 from .backend import eval_func_router, predict_topk_func
@@ -10,11 +11,8 @@ class Evaluator:
     def __init__(self, eval_input, eval_target, protocol, ks, eval_batch_size=1024):
         """
 
-        :param str eval_type: data split type, leave_one_out(loo) or holdout
-        :param list or int topK: top-k values to compute.
-        :param int num_threads: number of threads to use
         """
-        self.top_k = sorted(ks) if isinstance(ks, list) else [ks]
+        self.top_k = sorted(list(ks)) if isinstance(ks, Iterable) else [ks]
         self.max_k = max(self.top_k)
         
         self.batch_size = eval_batch_size
@@ -36,7 +34,7 @@ class Evaluator:
 
         output = model.predict(eval_users, self.eval_input, self.batch_size)
 
-        pred = self.predict_topk(output, self.max_k)
+        pred = self.predict_topk(output.astype(np.float32), self.max_k)
 
         score_cumulator = self.eval_func(pred, self.eval_target, self.top_k)
 

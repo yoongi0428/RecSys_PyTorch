@@ -1,4 +1,7 @@
-try:    
+HOLDOUT_METRICS = ['Prec', 'Recall', 'NDCG']
+LOO_METRICS = ['HR', 'NDCG']
+
+try:
     from .cython.loo import compute_loo_metrics_cy
     from .cython.holdout import compute_holdout_metrics_cy
     from .cython.func import predict_topk_cy
@@ -11,8 +14,6 @@ except:
     from .python.func import predict_topk_py
 
     CYTHON_OK = False
-
-# from evaluation.backend.python.NoveltyEvaluator import NoveltyEvaluator
 
 if CYTHON_OK:
     eval_func_router = {

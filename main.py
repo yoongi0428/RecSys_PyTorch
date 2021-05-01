@@ -5,8 +5,6 @@ import torch
 import models
 from data.dataset import UIRTDataset
 from evaluation.evaluator import Evaluator
-
-from experiment.config import Config
 from experiment.early_stop import EarlyStop
 
 from loggers import FileLogger, CSVLogger
@@ -59,11 +57,11 @@ if __name__ == '__main__':
     csv_logger = CSVLogger(log_dir)
 
     # Save log & dataset config.
-    logger.info(config)
-    logger.info(dataset)
+    # logger.info(config)
+    # logger.info(dataset)
 
     valid_input, valid_target = dataset.valid_input, dataset.valid_target
-    evaluator = Evaluator(valid_input, valid_target, protocol=dataset.protocol, ks=[5, 10, 100])
+    evaluator = Evaluator(valid_input, valid_target, protocol=dataset.protocol, ks=config.evaluator.ks)
 
     model = model_base(dataset, hparams, device)
 

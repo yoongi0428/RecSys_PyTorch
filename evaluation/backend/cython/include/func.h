@@ -4,7 +4,6 @@
 #ifndef TOOLS_H
 #define TOOLS_H
 
-// #include "thread_pool.h"
 #include <vector>
 #include <algorithm>
 using std::vector;
@@ -28,7 +27,6 @@ void c_top_k_array_index(float *scores_pt, int columns_num, int rows_num, int ma
         float *cur_scores_pt = scores_pt + columns_num*i;
         int *cur_ranking_pt = rankings_pt + max_k*i;
         c_top_k_index(cur_scores_pt, columns_num, max_k, cur_ranking_pt);
-        // pool.enqueue(c_top_k_index, cur_scores_pt, columns_num, max_k, cur_ranking_pt);
     }
 }
 

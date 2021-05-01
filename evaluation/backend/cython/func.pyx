@@ -13,20 +13,14 @@ def predict_topk_cy(scores, max_k):
     users_num, rank_len = np.shape(scores)
 
     # get the pointer of ranking scores
-    s = time()
     cdef float * scores_pt = <float *>np.PyArray_DATA(scores)
-    # print('convert scores to pointer:', time() - s)
 
     # store ranks results
-    s = time()
-    top_rankings = np.zeros([users_num, max_k], dtype=np.int32)
-    cdef int * rankings_pt = <int *>np.PyArray_DATA(top_rankings)
-    # print('convert ranking to pointer:', time() - s)
+    topk = np.zeros([users_num, max_k], dtype=np.int32)
+    cdef int * rankings_pt = <int *>np.PyArray_DATA(topk)
 
     # get top k rating index
-    s = time()
     c_top_k_array_index(scores_pt, rank_len, users_num, max_k, rankings_pt)
-    # print('topk:', time() - s)
 
-    return top_rankings
+    return topk
 
