@@ -1,9 +1,17 @@
+# directories
 .vscode
 **/__pycache__
 saves/*
-models/TODOs
-data/
+datasets/
+**/cache/
 
+# auxiliary files
+**/*.data
+**/*.stat
 **/*.cpp
 **/*.o
 **/*.so
+
+# etc
+checklist_2.0.md
+main_k_times.py
